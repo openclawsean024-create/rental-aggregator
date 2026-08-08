@@ -3,22 +3,32 @@
  * GET  /api/blacklist?q=&district=&limit=&offset=  — 查詢黑名單（去識別化）
  * POST /api/blacklist                              — 提交檢舉（status=pending）
  *
+ * 存儲策略（2026-08-08）：
+ * - 本地 dev (DATABASE_URL=file:...): 用 Prisma 寫入 SQLite
+ * - Vercel prod (DATABASE_URL=postgresql://...): 預期用 Prisma + Postgres
+ * - Vercel prod 預設 fallback (DATABASE_URL=file:./dev.db): 走 static 模式
+ *   因為 Vercel serverless filesystem 是 read-only，SQLite 沒法寫
+ *   static 模式 = 1,000 筆 in-memory JSON，POST 寫入 console + fake ID
+ *
  * 個資保護（PRD §5.2 / ADR-002）：
- *   - 一般查詢只回 landlordName（去識別化）
- *   - landlordNameFull 僅 Pro 才回（M3 實作）
- *   - 設計：把 mask 邏輯在 SQL 端用 landlordName 已存好的遮罩欄位做，
- *     因此一般查詢不需要再處理遮罩
+ *   - 一般查詢只回 landlordName（去識別化），landlordNameFull 留 Prisma 層
+ *   - 完整姓名僅 Pro 才回（M3 實作）
  *
  * 性能（PRD §5.1）：< 500ms
- *   - schema 已有 @@index([landlordName, addressDistrict])
- *   - 加 viewCount increment（熱門排序）
- *   - Prisma findMany 不用 include 全部欄位
+ *   - Static 模式：8 萬字節 JSON + 簡單 filter，應該 < 20ms
+ *   - Prisma 模式：依賴 DB 索引 + 查詢計劃
  */
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/db";
+import {
+  searchApproved,
+  getStats,
+  recordSubmission,
+  isStaticMode,
+  type BlacklistItem,
+} from "@/data/blacklist-store";
+import { maskLandlordName } from "@/lib/mask";
 
-// 強制 dynamic，否則 build 會 fail（用到 DB）
 export const dynamic = "force-dynamic";
 
 // =============================================================
@@ -53,20 +63,29 @@ export async function GET(request: NextRequest) {
 
     const { q, district, category, limit, offset } = parsed.data;
 
-    // 構建 WHERE（姓名只查詢已去識別化欄位）
-    const where: Record<string, unknown> = {
-      status: "approved", // 只回已審核的
-    };
+    // Static 模式：直接 in-memory filter
+    if (isStaticMode()) {
+      const result = searchApproved({ q, district, category, limit, offset });
+      return NextResponse.json(
+        {
+          mode: "static",
+          items: result.items,
+          total: result.total,
+          limit,
+          offset,
+          query: { q, district, category },
+          elapsedMs: result.elapsedMs,
+        },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    }
 
-    if (q) {
-      where.landlordName = { contains: q };
-    }
-    if (district) {
-      where.addressDistrict = { contains: district };
-    }
-    if (category) {
-      where.category = category;
-    }
+    // Prisma 模式（dev 或未來 prod with Postgres）
+    const { prisma } = await import("@/lib/db");
+    const where: Record<string, unknown> = { status: "approved" };
+    if (q) where.landlordName = { contains: q };
+    if (district) where.addressDistrict = { contains: district };
+    if (category) where.category = category;
 
     const [items, total] = await Promise.all([
       prisma.blacklistEntry.findMany({
@@ -98,13 +117,12 @@ export async function GET(request: NextRequest) {
           where: { id: { in: items.map((i) => i.id) } },
           data: { viewCount: { increment: 1 } },
         })
-        .catch(() => {
-          // 忽略 increment 失敗，不影響主查詢
-        });
+        .catch(() => {});
     }
 
     return NextResponse.json(
       {
+        mode: "db",
         items,
         total,
         limit,
@@ -112,12 +130,7 @@ export async function GET(request: NextRequest) {
         query: { q, district, category },
         elapsedMs: Date.now() - start,
       },
-      {
-        headers: {
-          // 避免 CDN 快取去識別化結果
-          "Cache-Control": "no-store",
-        },
-      },
+      { headers: { "Cache-Control": "no-store" } },
     );
   } catch (err) {
     console.error("[GET /api/blacklist] error:", err);
@@ -144,7 +157,6 @@ const PostSchema = z.object({
   ]),
   description: z.string().trim().min(10).max(500),
   evidenceUrls: z.array(z.string().url()).max(10).optional(),
-  // 提交者：M1 階段先允許匿名（用 IP 當 submitterId）；M2 串 Clerk
   submitterId: z.string().min(1).max(100).optional(),
 });
 
@@ -160,21 +172,39 @@ export async function POST(request: NextRequest) {
     }
 
     const data = parsed.data;
-
-    // 個資保護：直接 mask 後存 DB
-    const { maskLandlordName } = await import("@/lib/mask");
     const masked = maskLandlordName(data.landlordName);
 
-    // 提交者 ID：M1 階段用 IP + timestamp hash 作為匿名 ID
-    // 將來 Clerk 接管後直接用 user.id
+    // Static 模式：console log + fake pending ID
+    if (isStaticMode()) {
+      const entry = recordSubmission({
+        landlordName: masked,
+        addressDistrict: data.addressDistrict,
+        addressDetail: data.addressDetail,
+        category: data.category,
+        description: data.description,
+        evidenceUrls: data.evidenceUrls,
+      });
+      return NextResponse.json(
+        {
+          ok: true,
+          mode: "static",
+          entry,
+          message:
+            "檢舉已收到（static 模式）。Production DB 接入後會進入審核佇列（3-7 個工作天）。" +
+            "目前管理員會從 server log 看到您的提交，下週會批次匯入。",
+        },
+        { status: 202 },
+      );
+    }
+
+    // Prisma 模式
+    const { prisma } = await import("@/lib/db");
     const ip =
       request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
       request.headers.get("x-real-ip") ??
       "anonymous";
     const submitterId = data.submitterId ?? `anon-${ip}`;
 
-    // 匿名提交者 upsert 一個 User（FK 必須有對應 record）
-    // 這個 user.email 是個合成 id，實際上無法登入
     await prisma.user.upsert({
       where: { id: submitterId },
       update: {},
@@ -189,15 +219,15 @@ export async function POST(request: NextRequest) {
     const entry = await prisma.blacklistEntry.create({
       data: {
         landlordName: masked,
-        landlordNameFull: data.landlordName, // 完整姓名暫存，待審核通過後 Pro 才能看
+        landlordNameFull: data.landlordName,
         addressDistrict: data.addressDistrict,
         addressDetail: data.addressDetail,
         category: data.category,
         description: data.description,
         evidenceUrls: JSON.stringify(data.evidenceUrls ?? []),
         submitterId,
-        status: "pending", // PRD §3.4 AC-03：進審核佇列
-        severity: 3, // 預設中度，由管理員調整
+        status: "pending",
+        severity: 3,
       },
       select: {
         id: true,
@@ -208,14 +238,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json(
-      {
-        ok: true,
-        entry,
-        message: "檢舉已提交，進入管理員審核佇列（3-7 個工作天）",
-      },
-      { status: 201 },
-    );
+    return NextResponse.json({ ok: true, mode: "db", entry }, { status: 201 });
   } catch (err) {
     console.error("[POST /api/blacklist] error:", err);
     return NextResponse.json(
