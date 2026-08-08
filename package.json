@@ -5,7 +5,7 @@
   "description": "台灣租屋防雷網 — 黑名單資料庫 + 屋況清單 + 租約產生器 + 押金信託比較",
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && next build --webpack",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",

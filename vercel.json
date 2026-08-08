@@ -3,5 +3,10 @@
   "buildCommand": "npm run build",
   "installCommand": "npm install --legacy-peer-deps",
   "framework": "nextjs",
+  "build": {
+    "env": {
+      "NEXT_DISABLE_TURBOPACK": "1"
+    }
+  },
   "outputDirectory": ".next"
 }
