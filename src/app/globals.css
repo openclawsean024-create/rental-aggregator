@@ -1,3 +1,6 @@
+/* 字體從 Google Fonts 載入（必須在 @tailwind 之前） */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -101,5 +104,4 @@
   }
 }
 
-/* 字體從 Google Fonts 載入 */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap");
+
