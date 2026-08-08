@@ -1,14 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // PRD §4.5 graceful degradation: trailingSlash on API routes facilitates
-  // server-rendered traps; pages keep clean URLs.
   reactStrictMode: true,
   poweredByHeader: false,
-  experimental: {
-    // Server Actions are stable in 15; no flag needed.
-  },
-  // PRD §4.1 hosting: Vercel is the only target for now
-  output: "standalone",
+  // 不設 output: 'standalone' — Vercel 部署用 Next.js 預設 serverless mode
+  // 設 standalone 會讓 serverless function 試圖跑自己的 server 而跟 Vercel runtime 衝突
 };
 
 export default nextConfig;
