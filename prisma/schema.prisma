@@ -1,0 +1,113 @@
+// 台灣租屋防雷網 — Prisma schema
+// 對齊 PRD §4.3 資料模型
+// 開發階段 DB: SQLite (file:./dev.db)；Vercel prod 換 Postgres（P0-1 部署時切換）
+// 切換只需改 provider 為 "postgresql" + 換 DATABASE_URL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================
+// PRD §4.3 User
+// =============================================================
+model User {
+  id               String           @id @default(cuid())
+  email            String           @unique
+  role             String           @default("TENANT") // TENANT | LANDLORD | ADMIN
+  plan             String           @default("FREE")  // FREE | PRO_YEARLY
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  blacklistEntries BlacklistEntry[]
+  inspections      Inspection[]
+  leaseContracts   LeaseContract[]
+}
+
+// =============================================================
+// PRD §4.3 BlacklistEntry — M1 黑名單核心
+// 設計原則（PRD §5.2 / ADR-002）：
+//   - landlordName 儲存時已是「王○明」去識別化字串
+//   - 一般查詢 API 只回傳去識別化版本
+//   - Pro 用戶 API 才能看到完整姓名（Phase 2 實作）
+// =============================================================
+model BlacklistEntry {
+  id               String   @id @default(cuid())
+  // 顯示用：去識別化後的「王○明」
+  landlordName     String
+  // 完整姓名：只有 Pro 查詢 API 才回傳
+  landlordNameFull String?
+  // 只到區：台北市大安區
+  addressDistrict  String
+  // 街/路段：使用者授權才顯示
+  addressDetail    String?
+  // 糾紛類型：deposit_dispute | early_termination | fake_listing | maintenance_ignored | illegal_deduction
+  category         String
+  // 糾紛描述（≤ 500 字）
+  description      String
+  // 證據 URL（截圖/對話記錄 URLs）
+  evidenceUrls     String   @default("[]") // JSON-encoded string[] for SQLite
+  // 提交者 ID（PRD §5.2 加密儲存 — Phase 2）
+  submitterId      String
+  // 雙方陳述機制（被檢舉者可回應）
+  landlordResponse String?
+  // 狀態：pending | approved | rejected
+  status           String   @default("pending")
+  // 嚴重度：1-5（5 = 嚴重者，用 red-700）
+  severity         Int      @default(3)
+  // 評論數
+  reportCount      Int      @default(1)
+  // 瀏覽數
+  viewCount        Int      @default(0)
+  // 最後事件日期
+  lastIncidentAt   DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  submitter User? @relation(fields: [submitterId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  // PRD §4.3 要求的 index
+  @@index([landlordName, addressDistrict])
+  @@index([addressDistrict])
+  @@index([status])
+  @@index([lastIncidentAt])
+  @@index([severity])
+}
+
+// =============================================================
+// PRD §4.3 Inspection — 屋況檢查（M2 實作）
+// =============================================================
+model Inspection {
+  id              String   @id @default(cuid())
+  userId          String
+  propertyAddress String
+  items           String   @default("[]") // JSON-encoded
+  reportUrl       String?
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// =============================================================
+// PRD §4.3 LeaseContract — 租約（M2 實作）
+// =============================================================
+model LeaseContract {
+  id             String   @id @default(cuid())
+  userId         String
+  landlordName   String
+  tenantName     String
+  monthlyRent    Int
+  deposit        Int
+  startDate      DateTime
+  endDate        DateTime
+  customClauses  String?
+  pdfUrl         String?
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

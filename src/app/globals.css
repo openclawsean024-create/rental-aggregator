@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+ * 設計準則：偏冷的 slate/indigo 為主色
+ * 配色：brand-600 (indigo) | warn-500 (amber) | danger-700 (red)
+ * 字體：標題 Inter / Noto Sans TC，內文 14/15px 行高 1.6
+ * 互動：100ms transition、focus ring-2
+ * ============================================================ */
+
+@layer base {
+  html {
+    /* 內文 14/15px、行高 1.6（PRD 設計準則） */
+    font-family: "Inter", "Noto Sans TC", ui-sans-serif, system-ui, -apple-system,
+      sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    color: rgb(15 23 42); /* slate-900 */
+    background-color: rgb(248 250 252); /* slate-50 */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    min-height: 100vh;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: "Inter", "Noto Sans TC", ui-sans-serif, system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: rgb(15 23 42);
+  }
+
+  /* 設計準則：所有 form input focus ring-2 */
+  *:focus-visible {
+    outline: 2px solid rgb(99 102 241); /* brand-500 */
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+@layer components {
+  /* 主要按鈕 — 100ms transition */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5;
+    @apply bg-brand-600 text-white font-medium text-sm;
+    @apply transition-all duration-100 ease-out;
+    @apply hover:bg-brand-700 hover:shadow-md;
+    @apply active:scale-[0.98];
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5;
+    @apply bg-white text-slate-900 font-medium text-sm border border-slate-200;
+    @apply transition-all duration-100 ease-out;
+    @apply hover:bg-slate-50 hover:border-slate-300;
+    @apply active:scale-[0.98];
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-1.5;
+    @apply text-slate-600 font-medium text-sm;
+    @apply transition-all duration-100 ease-out;
+    @apply hover:bg-slate-100 hover:text-slate-900;
+  }
+
+  /* Input 樣式 — focus ring-2 + 100ms transition */
+  .input-base {
+    @apply w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5;
+    @apply text-slate-900 text-sm placeholder-slate-400;
+    @apply transition-all duration-100 ease-out;
+    @apply focus:border-brand-500 focus:ring-2 focus:ring-brand-100 focus:outline-none;
+  }
+
+  /* 卡片樣式 — Airbnb 風格，但更安靜 */
+  .card-listing {
+    @apply rounded-xl border border-slate-200/70 bg-white p-5;
+    @apply shadow-card transition-all duration-100 ease-out;
+    @apply hover:shadow-cardHover hover:border-slate-300;
+  }
+
+  /* 風險標籤 */
+  .risk-tag {
+    @apply inline-flex items-center gap-1 rounded-md px-2 py-0.5;
+    @apply text-xs font-medium;
+  }
+  .risk-tag-danger {
+    @apply bg-red-50 text-red-700 border border-red-200;
+  }
+  .risk-tag-warn {
+    @apply bg-amber-50 text-amber-700 border border-amber-200;
+  }
+  .risk-tag-neutral {
+    @apply bg-slate-100 text-slate-600 border border-slate-200;
+  }
+}
+
+/* 字體從 Google Fonts 載入 */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap");
