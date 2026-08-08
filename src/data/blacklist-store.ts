@@ -7,11 +7,15 @@
  * - Supabase/Neon 需要 Sean 提供 connection string（Sean 未提供）
  * - 1,000 筆只有 248 KB，直接 bundle 進 repository +
  *   build 時 import 進 serverless function 即可
- * - POST 提交：在 production 模式下暫不開放（in-memory 寫入會在 cold start 丟失）
+ * - POST 提交：在 production 模式下暫不開放內容寫入（in-memory 寫入會在 cold start 丟失）
  *   改用「記錄到 console + 回 202 + 訊息告知管理員」做法
  *   本地 dev 模式仍走 Prisma（保持原本 DX）
  *
- * 切換邏輯：DATABASE_URL 開頭是 "file:" 走 Prisma，否則走 static JSON
+ * 切換邏輯（isStaticMode）：
+ * 1. 環境變數 USE_BLACKLIST_STATIC=1（明示）
+ * 2. VERCEL=1 + 沒有真的 postgresql URL（placeholder）
+ * 3. DATABASE_URL=file:*（Vercel 環境）
+ * 4. 預設：本地 dev（DATABASE_URL=file:./dev.db）走 Prisma
  */
 import blacklistData from "./blacklist.json";
 
@@ -29,12 +33,18 @@ export type BlacklistItem = {
   createdAt: string;
 };
 
-// 已預先排序 (severity desc, lastIncidentAt desc) by export-seed-data.ts
 const ALL: BlacklistItem[] = blacklistData as BlacklistItem[];
 
 export function isStaticMode(): boolean {
-  const url = process.env.DATABASE_URL ?? "";
-  return !url.startsWith("file:") && !url.startsWith("postgres");
+  if (process.env.USE_BLACKLIST_STATIC === "1") return true;
+  if (process.env.VERCEL === "1") {
+    const url = process.env.DATABASE_URL ?? "";
+    if (!url.startsWith("postgresql://") && !url.startsWith("postgres://")) {
+      return true;
+    }
+    if (url.includes("placeholder") || url.includes("invalid")) return true;
+  }
+  return false;
 }
 
 export function getAllApproved(): BlacklistItem[] {
@@ -53,7 +63,6 @@ export function searchApproved(opts: {
   const district = opts.district?.trim() ?? "";
   const category = opts.category?.trim() ?? "";
 
-  // 過濾（startsWith 對中文模糊搜尋 OK，因為 DB 存的是已經去識別化字串）
   const filtered = ALL.filter((e) => {
     if (q && !e.landlordName.includes(q)) return false;
     if (district && !e.addressDistrict.includes(district)) return false;
@@ -76,7 +85,6 @@ export function getStats(): {
   totalApproved: number;
   pendingCount: number;
 } {
-  // 區域聚合
   const districtCount = new Map<string, number>();
   let recentCount = 0;
   const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -95,7 +103,7 @@ export function getStats(): {
     topDistricts,
     recentCount,
     totalApproved: ALL.length,
-    pendingCount: 0, // static 模式沒審核佇列
+    pendingCount: 0,
   };
 }
 
@@ -107,8 +115,6 @@ export function recordSubmission(payload: {
   description: string;
   evidenceUrls?: string[];
 }): { id: string; landlordName: string; addressDistrict: string; status: string; createdAt: string } {
-  // Static 模式：console log + 給假的 pending ID
-  // 將來 Sean 給 DB 後可以升級到真的寫入
   const id = `static-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const createdAt = new Date().toISOString();
   console.warn(
