@@ -46,3 +46,4 @@ prisma/migrations/dev.db*
 
 # Mac
 .DS_Store
+.env*
