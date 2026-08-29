@@ -103,6 +103,78 @@
 2. orchestrator 獨立重跑 verify 三個 command（typecheck/test/build 全 exit 0）— 確認 security 報告可信
 3. 派 docs 進 M4（subagent `d37daf6e`，背景跑）
 
+---
+
+## 🏁 FINAL STATUS — Goal 完成
+
+| Milestone | 狀態 | 證據 |
+|---|---|---|
+| **M1 — CI workflow** | ✅ 完成 | `f6b2e12` |
+| **M2 — Edge case 測試** | ✅ 完成 | `b50494e`（34 → 87 tests） |
+| **M3 backend — rate-limit + evidenceUrls** | ✅ 完成 | `23e7683`（87 → 107 tests, coverage 97.16%） |
+| **M3 security — headers + FINDINGS** | ✅ 完成 | `0ac551f`（6 headers, 4 findings, npm audit 0 prod CVE） |
+| **M4 — 文件同步 + BUILD_REPORT** | ✅ 完成 | `946b839`（README/STATUS/SOP 更新 + 新增 BUILD_REPORT.md） |
+
+**Total commits ahead of origin/main：9**（皆未 push，符合 goal constraint）
+
+```
+946b839  rpb(docs): M4 — file sync + BUILD_REPORT
+dd88f22  rpb(orchestrator): PLAN.md status update — M3 done, M4 in flight
+0ac551f  rpb(security): M3 hardening — security headers + SECURITY_FINDINGS
+6b575b2  rpb(orchestrator): PLAN.md status update — M3 backend done, security in flight
+23e7683  rpb(backend): M3 hardening — rate limit + evidenceUrls scheme allowlist
+bf5d49b  rpb(orchestrator): PLAN.md status update — M2 done, M3 backend in flight
+b50494e  rpb(qa): Milestone 2 — edge case test coverage (87/87 passing)
+b20ab4c  rpb(orchestrator): PLAN.md with Resume Context (Goal Round 1)
+f6b2e12  rpb(devops): add GitHub Actions CI workflow (Milestone 1)
+```
+
+### Final Verify（orchestrator 獨立跑，5 個檢查全綠）
+
+| 檢查 | 結果 |
+|---|---|
+| `npm run typecheck` | ✅ EXIT=0 |
+| `npm test` | ✅ **107/107 passed**（8 files, 1.01s） |
+| `npm run build` | ✅ EXIT=0（5 routes） |
+| TODO/FIXME/HACK scan | ✅ 0 new debt（rpb-docs-verify.log 自指不算） |
+| Secrets scan | ✅ 0 hits |
+| console.log in app code | ✅ 0（兩個命中都在 test 檔：route.test.ts 的斷言註解 + mask-invariant.test.ts 的 invariant fixture） |
+
+### Success Criteria 驗收對照（goal.md §Success Criteria）
+
+| # | 條件 | 結果 |
+|---|---|---|
+| 1 | 三個 verify command 全綠，無新增 warning | ✅ typecheck/test/build 全 EXIT=0；無新 warning（M1 baseline 的 `act()`/ECONNREFUSED stderr 是既有 noise） |
+| 2 | 沒有破壞性改動 | ✅ 公開 API contracts 不變（只新增 headers；rate limit 對合法 client 透明；evidenceUrls 是收緊而非放寬） |
+| 3 | 新增程式碼有測試覆蓋 | ✅ 新增 53 tests（mask 9 / blacklist-store 13 / route 22 + mask-invariant 3 / rate-limit 14）；coverage 95.09% → 97.16% statements |
+| 4 | 文件同步 | ✅ README（CI + coverage badge + Security posture 段落）+ STATUS（M1 Hardening 紀錄）+ SOP（CI 流程 + 測試慣例）+ BUILD_REPORT.md |
+| 5 | Code quality bar | ✅ 無 TODO/FIXME/HACK / 無 console.log（除 test invariant）/ 無未使用 import / 無 raw exception 吞噬 |
+| 6 | commit message 包含 `rpb:` 前綴 | ✅ 全部 9 個 commit 都符合：`rpb(devops)` / `rpb(orchestrator)` / `rpb(qa)` / `rpb(backend)` / `rpb(security)` / `rpb(docs)` |
+
+### Constraints 對照（goal.md §Constraints）
+
+| 約束 | 結果 |
+|---|---|
+| 不要 `git push` | ✅ 9 commits 全部本地，未 push |
+| 不要改 PRD/SPEC.md §1-§9 | ✅ 完全沒動 SPEC.md |
+| 不要引入新 heavyweight dep | ✅ M3 backend 用 stdlib Map；M2 test 用既有 vitest；zero new deps |
+| 不要把 secrets 寫進 commit | ✅ `git grep -E "(sk-|AKIA|ghp_)[A-Za-z0-9]{16,}"` 0 hits |
+| 不要改既有 schema | ✅ Prisma schema.prisma 完全沒動 |
+| 不要跳過驗收 | ✅ 每個 milestone 都有 `rpb-*-verify.log`，final verify 5 項全綠 |
+| 不要 LLM 自行聲稱完成 | ✅ 每個 builder 都有 verify log；orchestrator 獨立重跑確認 |
+
+### Known Limitations（follow-up，下一輪再處理）
+
+1. **PLAN.md R2**：rate limit in-memory 多實例不精確 → production 升級 Upstash Redis / Vercel KV
+2. **M1 baseline noise**：`TopDistricts.test.tsx` 缺 `act()` wrap + fetch mock 缺漏時打 `localhost:3000` → frontend round 補
+3. **devDependencies CVEs**：`npm audit fix --force` 升級 happy-dom / postcss / esbuild（需先跑回歸 + peer deps 驗證）
+4. **CSP 進階**：nonce-based + Report-Only 觀察期
+5. **CI 強化**：加 `npm audit --omit=dev --audit-level=high` 步驟
+
+### 完成聲明
+
+Goal `goal-88729ab3-eeb8-448d-95a0-39c9190d35de` 達成所有 success criteria，可標記 complete。
+
 ## 為什麼這樣排
 
 1. **M1（CI）獨立且阻塞 M4** — 沒 CI badge 之前 docs 無法更新 README。M2/M3 不阻塞 M1。
