@@ -1,0 +1,456 @@
+================================================================================
+R2 follow-up — Milestone 2 QA verify log
+date: 2026-08-29T23:59:00Z
+node: v22.23.2
+npm: 10.9.8
+head: 9ea4901bab5e38ec1f667feab5bb15a306c88034
+branch: main
+================================================================================
+
+================================================================================
+1) npm run typecheck
+================================================================================
+
+> rental-aggregator@0.1.0 typecheck
+> tsc --noEmit
+
+[typecheck exit: 0]
+
+================================================================================
+2) npm test
+================================================================================
+
+> rental-aggregator@0.1.0 test
+> vitest run
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.5 /Users/sean/Documents/Agent space/prompts/rental-aggregator/.clone
+
+ ✓ src/lib/mask-invariant.test.ts (3 tests) 4ms
+ ✓ src/lib/categories.test.ts (5 tests) 2ms
+ ✓ src/lib/mask.test.ts (23 tests) 3ms
+stderr | src/components/TopDistricts.test.tsx > TopDistricts > 成功抓取 stats 後顯示 TOP 5 區域
+AggregateError: 
+    at internalConnectMultiple (node:net:1135:18)
+    at afterConnectMultiple (node:net:1716:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1679:14)
+        at afterConnectMultiple (node:net:1709:16) {
+      errno: -61,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1679:14)
+        at afterConnectMultiple (node:net:1709:16) {
+      errno: -61,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+
+stderr | src/components/TopDistricts.test.tsx > TopDistricts > fetch 失敗時不 crash（loading 維持不刪）
+An update to TopDistricts inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/lib/rate-limit.test.ts (18 tests) 23ms
+ ✓ src/data/blacklist-store.test.ts (27 tests) 9ms
+ ✓ src/components/TopDistricts.test.tsx (3 tests) 93ms
+ ✓ src/components/BlacklistSearch.test.tsx (4 tests) 50ms
+stderr | src/app/api/blacklist/route.test.ts > /api/blacklist POST — Rate limit (M3 hardening) > 前 5 次合法 POST → 202，第 6 次 → 429
+[blacklist-store] static mode: submission logged to console only {
+  id: 'static-1788047942924-9kq9b6',
+  payload: {
+    landlordName: '王○明',
+    addressDistrict: '台北市大安區',
+    addressDetail: undefined,
+    category: 'deposit_dispute',
+    description: '退租時房東以各種理由拒退押金',
+    evidenceUrls: undefined
+  }
+}
+[blacklist-store] static mode: submission logged to console only {
+  id: 'static-1788047942925-f4b0jv',
+  payload: {
+    landlordName: '王○明',
+    addressDistrict: '台北市大安區',
+    addressDetail: undefined,
+    category: 'deposit_dispute',
+    description: '退租時房東以各種理由拒退押金',
+    evidenceUrls: undefined
+  }
+}
+[blacklist-store] static mode: submission logged to console only {
+  id: 'static-1788047942925-2ilioe',
+  payload: {
+    landlordName: '王○明',
+    addressDistrict: '台北市大安區',
+    addressDetail: undefined,
+    category: 'deposit_dispute',
+    description: '退租時房東以各種理由拒退押金',
+    evidenceUrls: undefined
+  }
+}
+[blacklist-store] static mode: submission logged to console only {
+  id: 'static-1788047942925-cjenv1',
+  payload: {
+    landlordName: '王○明',
+    addressDistrict: '台北市大安區',
+    addressDetail: undefined,
+    category: 'deposit_dispute',
+    description: '退租時房東以各種理由拒退押金',
+    evidenceUrls: undefined
+  }
+}
+[blacklist-store] static mode: submission logged to console only {
+  id: 'static-1788047942925-t6adxx',
+  payload: {
+    landlordName: '王○明',
+    addressDistrict: '台北市大安區',
+    addressDetail: undefined,
+    category: 'deposit_dispute',
+    description: '退租時房東以各種理由拒退押金',
+    evidenceUrls: undefined
+  }
+}
+
+ ✓ src/app/api/blacklist/route.test.ts (28 tests) 63ms
+stderr | src/app/api/blacklist/route.test.ts > /api/blacklist POST — Rate limit (M3 hardening) > 429 response 含 Retry-After header + retryAfterSec body
+[blacklist-store] static mode: submission logged to console only {
+  id: 'static-1788047942926-oudl60',
+  payload: {
+    landlordName: '王○明',
+    addressDistrict: '台北市大安區',
+    addressDetail: undefined,
+    category: 'deposit_dispute',
+    description: '退租時房東以各種理由拒退押金',
+    evidenceUrls: undefined
+  }
+}
+[blacklist-store] static mode: submission logged to console only {
+  id: 'static-1788047942926-4t0yzp',
+  payload: {
+    landlordName: '王○明',
+    addressDistrict: '台北市大安區',
+    addressDetail: undefined,
+    category: 'deposit_dispute',
+    description: '退租時房東以各種理由拒退押金',
+    evidenceUrls: undefined
+  }
+}
+[blacklist-store] static mode: submission logged to console only {
+  id: 'static-1788047942926-7u7s1v',
+  payload: {
+    landlordName: '王○明',
+    addressDistrict: '台北市大安區',
+    addressDetail: undefined,
+    category: 'deposit_dispute',
+    description: '退租時房東以各種理由拒退押金',
+    evidenceUrls: undefined
+  }
+}
+[blacklist-store] static mode: submission logged to console only {
+  id: 'static-1788047942926-h7wo82',
+  payload: {
+    landlordName: '王○明',
+    addressDistrict: '台北市大安區',
+    addressDetail: undefined,
+    category: 'deposit_dispute',
+    description: '退租時房東以各種理由拒退押金',
+    evidenceUrls: undefined
+  }
+}
+[blacklist-store] static mode: submission logged to console only {
+  id: 'static-1788047942926-3dmnnm',
+  payload: {
+    landlordName: '王○明',
+    addressDistrict: '台北市大安區',
+    addressDetail: undefined,
+    category: 'deposit_dispute',
+    description: '退租時房東以各種理由拒退押金',
+    evidenceUrls: undefined
+  }
+}
+
+
+ Test Files  8 passed (8)
+      Tests  111 passed (111)
+   Start at  07:59:02
+   Duration  706ms (transform 257ms, setup 543ms, collect 587ms, tests 247ms, environment 1.38s, prepare 464ms)
+
+[test exit: 0]
+
+================================================================================
+3) npm run build
+================================================================================
+
+> rental-aggregator@0.1.0 build
+> prisma generate && next build --webpack
+
+Prisma schema loaded from prisma/schema.prisma
+
+✔ Generated Prisma Client (v5.22.0) to ./node_modules/@prisma/client in 27ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Want to react to database changes in your app as they happen? Discover how with Pulse: https://pris.ly/tip-1-pulse
+
+▲ Next.js 16.3.0 (webpack)
+- Environments: .env.local
+✓ Running next.config.mjs took 5ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 629ms
+  Running TypeScript ...
+  Finished TypeScript in 816ms ...
+  Collecting page data using 7 workers ...
+  Generating static pages using 7 workers (0/3) ...
+✓ Generating static pages using 7 workers (3/3) in 266ms
+  Finalizing page optimization ...
+  Collecting build traces ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /api/blacklist
+├ ƒ /api/blacklist/stats
+└ ƒ /api/health
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+[build exit: 0]
+
+================================================================================
+4) npm run test:coverage
+================================================================================
+
+> rental-aggregator@0.1.0 test:coverage
+> vitest run --coverage
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.5 /Users/sean/Documents/Agent space/prompts/rental-aggregator/.clone
+      Coverage enabled with v8
+
+ ✓ src/lib/categories.test.ts (5 tests) 2ms
+ ✓ src/lib/mask-invariant.test.ts (3 tests) 4ms
+ ✓ src/lib/mask.test.ts (23 tests) 3ms
+ ✓ src/lib/rate-limit.test.ts (18 tests) 20ms
+ ✓ src/data/blacklist-store.test.ts (27 tests) 15ms
+stderr | src/components/TopDistricts.test.tsx > TopDistricts > fetch 失敗時不 crash（loading 維持不刪）
+An update to TopDistricts inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/TopDistricts.test.tsx > TopDistricts > fetch 失敗時不 crash（loading 維持不刪）
+AggregateError: 
+    at internalConnectMultiple (node:net:1135:18)
+    at afterConnectMultiple (node:net:1716:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1679:14)
+        at afterConnectMultiple (node:net:1709:16) {
+      errno: -61,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1679:14)
+        at afterConnectMultiple (node:net:1709:16) {
+      errno: -61,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+
+stderr | src/app/api/blacklist/route.test.ts > /api/blacklist POST — Rate limit (M3 hardening) > 前 5 次合法 POST → 202，第 6 次 → 429
+[blacklist-store] static mode: submission logged to console only {
+  id: 'static-1788047950524-qdhr0p',
+  payload: {
+    landlordName: '王○明',
+    addressDistrict: '台北市大安區',
+    addressDetail: undefined,
+    category: 'deposit_dispute',
+    description: '退租時房東以各種理由拒退押金',
+    evidenceUrls: undefined
+  }
+}
+[blacklist-store] static mode: submission logged to console only {
+  id: 'static-1788047950525-s8zm9k',
+  payload: {
+    landlordName: '王○明',
+    addressDistrict: '台北市大安區',
+    addressDetail: undefined,
+    category: 'deposit_dispute',
+    description: '退租時房東以各種理由拒退押金',
+    evidenceUrls: undefined
+  }
+}
+[blacklist-store] static mode: submission logged to console only {
+  id: 'static-1788047950525-7js9bx',
+  payload: {
+    landlordName: '王○明',
+    addressDistrict: '台北市大安區',
+    addressDetail: undefined,
+    category: 'deposit_dispute',
+    description: '退租時房東以各種理由拒退押金',
+    evidenceUrls: undefined
+  }
+}
+[blacklist-store] static mode: submission logged to console only {
+  id: 'static-1788047950525-auct9v',
+  payload: {
+    landlordName: '王○明',
+    addressDistrict: '台北市大安區',
+    addressDetail: undefined,
+    category: 'deposit_dispute',
+    description: '退租時房東以各種理由拒退押金',
+    evidenceUrls: undefined
+  }
+}
+[blacklist-store] static mode: submission logged to console only {
+  id: 'static-1788047950526-ulf4yt',
+  payload: {
+    landlordName: '王○明',
+    addressDistrict: '台北市大安區',
+    addressDetail: undefined,
+    category: 'deposit_dispute',
+    description: '退租時房東以各種理由拒退押金',
+    evidenceUrls: undefined
+  }
+}
+
+stderr | src/app/api/blacklist/route.test.ts > /api/blacklist POST — Rate limit (M3 hardening) > 429 response 含 Retry-After header + retryAfterSec body
+[blacklist-store] static mode: submission logged to console only {
+  id: 'static-1788047950527-7agdyv',
+  payload: {
+    landlordName: '王○明',
+    addressDistrict: '台北市大安區',
+    addressDetail: undefined,
+    category: 'deposit_dispute',
+    description: '退租時房東以各種理由拒退押金',
+    evidenceUrls: undefined
+  }
+}
+[blacklist-store] static mode: submission logged to console only {
+  id: 'static-1788047950528-tce202',
+  payload: {
+    landlordName: '王○明',
+    addressDistrict: '台北市大安區',
+    addressDetail: undefined,
+    category: 'deposit_dispute',
+    description: '退租時房東以各種理由拒退押金',
+    evidenceUrls: undefined
+  }
+}
+[blacklist-store] static mode: submission logged to console only {
+  id: 'static-1788047950530-a683gd',
+  payload: {
+    landlordName: '王○明',
+    addressDistrict: '台北市大安區',
+    addressDetail: undefined,
+    category: 'deposit_dispute',
+    description: '退租時房東以各種理由拒退押金',
+    evidenceUrls: undefined
+  }
+}
+[blacklist-store] static mode: submission logged to console only {
+  id: 'static-1788047950530-bkqqbm',
+  payload: {
+    landlordName: '王○明',
+    addressDistrict: '台北市大安區',
+    addressDetail: undefined,
+    category: 'deposit_dispute',
+    description: '退租時房東以各種理由拒退押金',
+    evidenceUrls: undefined
+  }
+}
+[blacklist-store] static mode: submission logged to console only {
+  id: 'static-1788047950530-ajphoy',
+  payload: {
+    landlordName: '王○明',
+    addressDistrict: '台北市大安區',
+    addressDetail: undefined,
+    category: 'deposit_dispute',
+    description: '退租時房東以各種理由拒退押金',
+    evidenceUrls: undefined
+  }
+}
+
+ ✓ src/app/api/blacklist/route.test.ts (28 tests) 72ms
+ ✓ src/components/TopDistricts.test.tsx (3 tests) 97ms
+ ✓ src/components/BlacklistSearch.test.tsx (4 tests) 58ms
+
+ Test Files  8 passed (8)
+      Tests  111 passed (111)
+   Start at  07:59:09
+   Duration  810ms (transform 285ms, setup 419ms, collect 689ms, tests 270ms, environment 1.47s, prepare 549ms)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |    97.4 |    93.22 |    93.1 |    97.4 |                   
+ app/api/blacklist |     100 |      100 |     100 |     100 |                   
+  route.test.ts    |     100 |      100 |     100 |     100 |                   
+ components        |    97.7 |    90.16 |   88.88 |    97.7 |                   
+  ...arch.test.tsx |     100 |      100 |     100 |     100 |                   
+  ...istSearch.tsx |   94.47 |    79.31 |      80 |   94.47 | ...72,181-186,208 
+  ...icts.test.tsx |     100 |      100 |     100 |     100 |                   
+  TopDistricts.tsx |     100 |      100 |     100 |     100 |                   
+ data              |   99.45 |    96.42 |     100 |   99.45 |                   
+  ...store.test.ts |   99.32 |    97.87 |     100 |   99.32 | 77-78             
+  ...list-store.ts |     100 |    94.59 |     100 |     100 | 41,94             
+ lib               |   94.35 |    91.23 |    92.3 |   94.35 |                   
+  ...ories.test.ts |     100 |      100 |     100 |     100 |                   
+  categories.ts    |     100 |      100 |     100 |     100 |                   
+  db.ts            |       0 |        0 |       0 |       0 | 1-17              
+  ...riant.test.ts |   83.63 |    77.61 |     100 |   83.63 | ...06-112,143-144 
+  mask.test.ts     |     100 |      100 |     100 |     100 |                   
+  mask.ts          |     100 |      100 |     100 |     100 |                   
+  ...limit.test.ts |     100 |      100 |     100 |     100 |                   
+  rate-limit.ts    |     100 |    96.77 |     100 |     100 | 73                
+-------------------|---------|----------|---------|---------|-------------------
+
+=============================== Coverage summary ===============================
+Statements   : 97.4% ( 1730/1776 )
+Branches     : 93.22% ( 358/384 )
+Functions    : 93.1% ( 27/29 )
+Lines        : 97.4% ( 1730/1776 )
+================================================================================
+[coverage exit: 0]
+
+================================================================================
+Verify log END
+================================================================================
