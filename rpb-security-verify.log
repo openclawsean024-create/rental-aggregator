@@ -1,0 +1,304 @@
+================================================================================
+rpb-security-verify.log — Milestone 3 (security lead)
+================================================================================
+Timestamp       : 2026-08-29 22:21:34 CST
+Branch          : main (ahead of origin/main by 5 commits)
+HEAD            : 6b575b2911720483c65ab3318647720b6c3eed28 (working tree M3 changes)
+M3 scope        : Security lead — vercel.json headers + SECURITY_FINDINGS.md
+                  (production code changes by backend agent in commit 23e7683)
+
+================================================================================
+1. npm run typecheck
+================================================================================
+> rental-aggregator@0.1.0 typecheck
+> tsc --noEmit
+
+TYPECHECK_EXIT=0
+
+✅ PASS
+
+================================================================================
+2. npm test
+================================================================================
+> rental-aggregator@0.1.0 test
+> vitest run
+
+The CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.
+
+ RUN  v2.1.5 /Users/sean/Documents/Agent space/prompts/rental-aggregator/.clone
+
+ ✓ src/lib/mask-invariant.test.ts (3 tests) 5ms
+ ✓ src/lib/mask.test.ts (23 tests) 3ms
+ ✓ src/lib/rate-limit.test.ts (14 tests) 7ms
+ ✓ src/lib/categories.test.ts (5 tests) 2ms
+ ✓ src/data/blacklist-store.test.ts (27 tests) 22ms
+ ✓ src/app/api/blacklist/route.test.ts (28 tests) 86ms
+ ✓ src/components/BlacklistSearch.test.tsx (4 tests) 37ms
+ ✓ src/components/TopDistricts.test.tsx (3 tests) 124ms
+
+ Test Files  8 passed (8)
+      Tests  107 passed (107)
+   Duration  1.02s
+
+TEST_EXIT=0
+
+✅ PASS — 107/107 (M2 baseline 87 + M3 +20)
+   Breakdown:
+   - mask.test.ts                : 23 tests (ADR-002 mask edge cases)
+   - mask-invariant.test.ts      : 3  tests (ADR-002 invariant guards)
+   - rate-limit.test.ts          : 14 tests (M3 new — sliding window unit)
+   - categories.test.ts          : 5  tests
+   - blacklist-store.test.ts     : 27 tests
+   - route.test.ts               : 28 tests (M3 hardening: 4 evidenceUrls 400
+                                            cases + 3 rate limit integration cases)
+   - BlacklistSearch.test.tsx    : 4  tests
+   - TopDistricts.test.tsx       : 3  tests (with M1 baseline stderr noise:
+                                            ECONNREFUSED on missing fetch mock +
+                                            act() warning — non-M3, known issue
+                                            in PLAN.md Round 2 status update)
+
+================================================================================
+3. npm run build
+================================================================================
+> rental-aggregator@0.1.0 build
+> prisma generate && next build --webpack
+
+Prisma schema loaded from prisma/schema.prisma
+✔ Generated Prisma Client (v5.22.0) to ./node_modules/@prisma/client in 42ms
+
+▲ Next.js 16.3.0 (webpack)
+✓ Running next.config.mjs took 5ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 620ms
+  Running TypeScript ...
+  Finished TypeScript in 920ms ...
+  Collecting page data using 7 workers ...
+  Generating static pages using 7 workers (0/3) ...
+✓ Generating static pages using 7 workers (3/3) in 290ms
+  Finalizing page optimization ...
+  Collecting build traces ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /api/blacklist
+├ ƒ /api/blacklist/stats
+└ ƒ /api/health
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+BUILD_EXIT=0
+
+✅ PASS — 5 routes generated (1 static + 1 not-found + 3 dynamic)
+
+================================================================================
+4. npm audit --omit=dev (PRODUCTION dependencies only — this is the gate)
+================================================================================
+found 0 vulnerabilities
+
+AUDIT_PROD_EXIT=0
+
+✅ PASS — 0 critical / 0 high / 0 moderate / 0 low in production dependencies
+
+Production dep manifest (package.json dependencies):
+  @prisma/client      5.22.0   ✅ clean
+  clsx                2.1.1    ✅ clean
+  framer-motion       11.11.17 ✅ clean
+  lucide-react        0.468.0  ✅ clean
+  next                16.3.0   ✅ clean
+  react               19.0.0   ✅ clean
+  react-dom           19.0.0   ✅ clean
+  zod                 3.23.8   ✅ clean
+
+================================================================================
+5. npm audit (FULL — including devDependencies, for visibility only)
+================================================================================
+# npm audit report
+
+@eslint/plugin-kit  <0.3.4
+@eslint/plugin-kit is vulnerable to Regular Expression Denial of Service attacks
+through ConfigCommentParser - https://github.com/advisories/GHSA-xffm-g5w8-qvg7
+fix available via `npm audit fix --force`
+Will install eslint@9.39.5, which is outside the stated dependency range
+node_modules/@eslint/plugin-kit
+  eslint  9.10.0 - 9.26.0
+  Depends on vulnerable versions of @eslint/plugin-kit
+  node_modules/eslint
+
+esbuild  <=0.24.2
+Severity: moderate
+esbuild enables any website to send any requests to the development server and
+read the response - https://github.com/advisories/GHSA-67mh-4wv8-2f99
+fix available via `npm audit fix --force`
+Will install @vitest/coverage-v8@2.1.9, which is outside the stated dependency range
+node_modules/esbuild
+node_modules/vite/node_modules/esbuild
+  tsx  3.13.0 - 4.19.2
+  Depends on vulnerable versions of esbuild
+node_modules/tsx
+  vite  <=6.4.2
+  Depends on vulnerable versions of esbuild
+node_modules/vite
+    @vitejs/plugin-react  2.0.0-alpha.0 - 4.3.3
+    Depends on vulnerable versions of vite
+node_modules/@vitejs/plugin-react
+    @vitest/mocker  <=3.0.0-beta.4
+    Depends on vulnerable versions of vite
+node_modules/@vitest/mocker
+      vitest  <=3.2.5
+      Depends on vulnerable versions of @vitest/mocker
+      Depends on vulnerable versions of vite
+      Depends on vulnerable versions of vite-node
+node_modules/vitest
+        @vitest/coverage-v8  2.0.0-beta.1 - 2.1.8
+        Depends on vulnerable versions of vitest
+node_modules/@vitest/coverage-v8
+    vite-node  <=2.2.0-beta.2
+    Depends on vulnerable versions of vite
+node_modules/vite-node
+
+happy-dom  <=20.8.8
+Severity: critical
+Happy DOM: VM Context Escape can lead to Remote Code Execution
+  - https://github.com/advisories/GHSA-37j7-fg3j-429f
+Happy DOM's fetch credentials include uses page-origin cookies instead of
+target-origin cookies - https://github.com/advisories/GHSA-w4j7-fg3j-429f
+  - https://github.com/advisories/GHSA-w4gp-fjgq-3q4g
+Happy DOM ECMAScriptModuleCompiler: unsanitized export names are interpolated
+as executable code - https://github.com/advisories/GHSA-6q6h-j7hj-3r64
+fix available via `npm audit fix --force`
+Will install happy-dom@20.11.15, which is a breaking change
+node_modules/happy-dom
+
+postcss  <=8.5.22
+Severity: high
+PostCSS has XSS via Unescaped </style> in its CSS Stringify Output
+  - https://github.com/advisories/GHSA-qx2v-qp2m-jg93
+PostCSS: Arbitrary file read and information disclosure via
+attacker-controlled sourceMappingURL in CSS comments
+  - https://github.com/advisories/GHSA-6g55-p6wh-862q
+PostCSS: incomplete fix of GHSA-6g55-p6wh-862q — attacker-controlled
+sourceMappingURL reads arbitrary .map files when `from` is unset
+  - https://github.com/advisories/GHSA-fxqj-rqcc-2cmp
+PostCSS: Path Traversal in Previous Source Map Auto-Loading (sourceMappingURL)
+leads to Arbitrary .map File Disclosure
+  - https://github.com/advisories/GHSA-r28c-9q8g-f849
+fix available via `npm audit fix --force`
+Will install postcss@8.5.26, which is outside the stated dependency range
+node_modules/postcss
+
+12 vulnerabilities (2 low, 5 moderate, 2 high, 3 critical)
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+AUDIT_FULL_EXIT=1
+
+📋 VISIBILITY ONLY — M3 decision: DO NOT auto-fix
+   Reasoning:
+   - All 12 vulns are in devDependencies; ZERO enter production bundle
+   - happy-dom critical RCE is in test environment only (vitest + happy-dom)
+   - postcss high is build-time CSS processing (Next.js compiles CSS at build)
+   - Fixes require major version bumps (happy-dom 15→20 is breaking,
+     eslint 9→9.39 may shift plugin compat, postcss 8.4→8.5 is minor but
+     needs regression test)
+   - M3 scope explicitly excludes dependency upgrade per security.md brief
+   - Tracked as follow-up in SECURITY_FINDINGS.md for M4+ evaluation
+
+================================================================================
+6. git grep — secrets scan
+================================================================================
+Pattern: (sk-|AKIA|ghp_|sk_live_|sk_test_|xoxb-|xoxp-|AIza[0-9A-Za-z_-]{35})
+Excluded: node_modules, .next, coverage, rpb-*-verify.log, SECURITY_FINDINGS.md
+         (PLAN.md + package-lock.json included for context — see below)
+
+PLAN.md:27            (regex literal in M2 milestone table — false positive)
+PLAN.md:154           (regex literal in M3 verify checklist — false positive)
+PLAN.md:222           (regex literal in final round checklist — false positive)
+package-lock.json:6310 (https://registry.npmjs.org/queue-microtask — npm URL)
+
+Excluding PLAN.md + package-lock.json → 0 matches ✅
+
+SECRETS_EXIT=0
+✅ PASS — no leaked credentials in source code
+
+================================================================================
+7. git grep — TODO/FIXME/HACK residual
+================================================================================
+Pattern: (TODO|FIXME|HACK)
+Excluded: node_modules, .next, coverage, rpb-*-verify.log, SECURITY_FINDINGS.md,
+          PRD/SPEC.md
+
+PLAN.md:153           (regex literal in M3 verify checklist — self-reference)
+PLAN.md:221           (regex literal in final round checklist — self-reference)
+
+Excluding PLAN.md → 0 matches ✅
+
+TODO_EXIT=0
+✅ PASS — no new technical debt residue from M2/M3
+
+================================================================================
+8. .gitignore coverage check
+================================================================================
+Existing entries cover: .env*, .env.local, .env.production.local, *.pem,
+                         node_modules/, .next/, coverage/, prisma/*.db,
+                         *.swp, .vercel/
+
+Not present (low priority): *.bak, *.tmp, .idea (covered), .vscode (covered)
+
+Decision: NO CHANGES — current .gitignore is sufficient for M3 scope
+          (brief allows additions only, no semantic changes to existing entries).
+
+================================================================================
+9. M3 Security Deliverables Manifest
+================================================================================
+Files in working tree (uncommitted, to be committed in rpb(security): commit):
+
+  M  vercel.json
+     + 14 lines (headers block with 6 security headers)
+
+  ?? SECURITY_FINDINGS.md
+     + ~250 lines (OWASP Top 10 + ADR-002 + npm audit + verify summary)
+
+  ?? rpb-security-verify.log
+     + this file
+
+Files NOT modified (out of security lead scope):
+  src/lib/rate-limit.ts              (backend — commit 23e7683)
+  src/app/api/blacklist/route.ts     (backend — commit 23e7683)
+  src/lib/rate-limit.test.ts         (backend — commit 23e7683)
+  src/app/api/blacklist/route.test.ts (backend — commit 23e7683)
+  src/data/blacklist-store.ts        (M2 baseline, unchanged)
+  src/lib/mask.ts                    (M2 baseline, unchanged)
+  PRD/SPEC.md                        (hard rule: do not modify)
+  next.config.mjs                    (frontend, untouched)
+  .github/workflows/ci.yml           (devops scope)
+  package.json / package-lock.json   (no dep upgrade per brief)
+
+================================================================================
+Summary
+================================================================================
+  typecheck        : PASS (EXIT=0)
+  test             : PASS (EXIT=0, 107/107 tests)
+  build            : PASS (EXIT=0, 5 routes generated)
+  npm audit prod   : PASS (0 vulns in production dependencies)
+  npm audit full   : 12 dev-only vulns (no production impact, deferred to M4+)
+  secrets scan     : PASS (0 leaks)
+  TODO scan        : PASS (0 new debt)
+
+  Severity tally for SECURITY_FINDINGS.md:
+    Critical : 0  ✅ (acceptable per PLAN.md M3 verify gate)
+    High     : 1  (javascript: URL injection — FIXED in commit 23e7683)
+    Medium   : 2  (rate limit missing — FIXED in commit 23e7683;
+                    security headers — FIXED in this round)
+    Low      : 0
+
+  Known limitations (R2): 1
+    - Rate limit in-memory Map is per-instance on Vercel serverless
+      → follow-up: upgrade to Upstash Redis / Vercel KV / Cloudflare edge
+
+================================================================================
+End of rpb-security-verify.log
+================================================================================
