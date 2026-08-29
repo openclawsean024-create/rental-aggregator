@@ -324,3 +324,182 @@ M2 (tests) ────────────────┐  │
 - [ ] `git grep -E "TODO|FIXME|HACK"` 沒有新增
 - [ ] `git grep -E "(sk-|AKIA|ghp_)[A-Za-z0-9]{16,}"` 沒有 leak
 - [ ] 所有 `rpb-*-verify.log` 存在且 ✅
+
+---
+
+# Follow-up Round: R2 Rate Limit → Upstash Redis（goal-aaed0fc0-...）
+
+> 由 orchestrator 在 R2 upgrade goal（Round 1/256）追加。
+> HEAD = `08ffa8d`（M1 Hardening 完整 complete，10 commits ahead of origin/main）
+> 本 round scope：只升級既有 `src/lib/rate-limit.ts`（in-memory → Upstash Redis + in-memory fallback），不要再加其他 feature。
+
+## 為什麼這樣排（vs 之前 M1 Hardening round）
+
+1. **scope 單一**：只動 `src/lib/rate-limit.ts` + `src/lib/rate-limit.test.ts` + 加 2 個 dep（`@upstash/redis`、`@upstash/ratelimit`）。其他檔案（route.ts、SPEC、vercel.json）**不動**。
+2. **user Phase 0 可平行**：Upstash Redis setup 跟 backend refactor + qa tests 平行跑，因為 tests 都用 mock Redis，不打真網路。
+3. **graceful fallback 設計**：Redis 不可達時 fallback 到 in-memory，所以即使 user Phase 0 還沒完成，**現有 production 也不會掛** — deploy 後沒設 env var 就走 in-memory path（跟現在一樣）。
+4. **既有 14 tests 全保留**：refactor 後 mock Redis client，但 API 行為測試案例（sliding window 5/60s、IP isolation、window reset 等）全部沿用，只是實作從 in-memory Map 改成 mock Redis 回應。
+
+## Milestone 1 — Backend refactor（rate-limit.ts）
+
+- **owner**: backend
+- **scope**:
+  - 安裝 `@upstash/redis` + `@upstash/ratelimit`（兩者加起來 < 30KB，無 heavyweight transitive）
+  - 重寫 `src/lib/rate-limit.ts`：
+    - 加 `Redis` client（從 `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` env 讀）
+    - 用 `@upstash/ratelimit` 的 `Ratelimit.slidingWindow(5, "60 s")`
+    - **`isRedisConfigured()` helper**：env 沒設就 false
+    - **`checkRateLimit()` 行為**：
+      1. Redis 沒設 env → 直接走 in-memory（純 legacy）
+      2. Redis 有設 → 用 `@upstash/ratelimit` limit
+      3. Redis 拋 exception → `console.warn` + fallback in-memory（不 throw 給 caller）
+    - **`getClientIp(headers)` 不動**
+    - **`_resetRateLimitForTests()` 維持**（test 用）
+  - **不動**：`src/app/api/blacklist/route.ts`（caller 行為不變；signature `checkRateLimit(ip, limit, windowMs)` 維持）
+- **verify**:
+  - `npm run typecheck` exit 0
+  - `npm test` exit 0（既有 107 tests 全綠；新增 Redis-mock tests）
+  - `npm run build` exit 0
+  - `npm run test:coverage` ≥ 97% statements（不退步）
+  - 沒有真實 Redis 連線（CI / 本地無 env 時不打 `https://*.upstash.io`）
+- **est. LOC**: ~80 (production code)
+- **verify log**: `rpb-r2-backend-verify.log`
+
+## Milestone 2 — QA tests（mock Redis + 新 case）
+
+- **owner**: qa
+- **scope**:
+  - 既有 14 unit tests（`src/lib/rate-limit.test.ts`）改用 mock Redis client
+    - 用 `vi.mock("@upstash/redis", ...)` mock `Redis` class
+    - 用 `vi.mock("@upstash/ratelimit", ...)` mock `Ratelimit` class
+    - 既有行為測試（sliding window / IP isolation / window reset）改成驗證 mock Redis 的 call 而不是 Map state
+  - 新增 ≥ 4 case：
+    1. **Redis happy path**：mock `limit()` 回 `{ success: true, remaining, reset }` → `checkRateLimit` 回 `ok=true`
+    2. **Redis over limit**：mock 回 `{ success: false, ... }` → `checkRateLimit` 回 `ok=false, remaining=0`
+    3. **Redis down fallback**：mock `limit()` throw → `console.warn` + 走 in-memory + `ok=true`（不 throw）
+    4. **Redis 超時 fallback**：mock `limit()` resolve 但延遲 > 1s → 走 in-memory
+  - 既有 `src/app/api/blacklist/route.test.ts` Rate limit describe 維持（mock Redis 已經 implicit，rate-limit.ts 內部怎麼實作不影響 route test）
+  - 既有 `src/lib/mask-invariant.test.ts` **不動**
+- **verify**:
+  - 既有 14 tests 改 mock-based 後仍全綠
+  - 新增 4 case 全綠
+  - coverage 維持 ≥ 97% statements
+- **est. LOC**: ~80 (新增 mock setup + 4 case)
+- **verify log**: `rpb-r2-qa-verify.log`
+
+## Milestone 3 — Docs sync（README / STATUS / SECURITY_FINDINGS / PLAN）
+
+- **owner**: docs
+- **scope**:
+  - `README.md`：
+    - 「Security posture (M3)」段落補「M3.5 Rate limit hardening」子段落：
+      - 改用 Upstash Redis 共享狀態
+      - 多實例 / cold start 都正確計數
+      - Free tier 10K commands/day
+      - graceful fallback 到 in-memory（Redis 不可達時）
+    - 加 UPSTASH_* env 設定說明（連結 Upstash dashboard）
+  - `STATUS.md`：加「M3.5 Rate limit hardening (R2 upgrade)」紀錄區塊
+  - `SECURITY_FINDINGS.md`：
+    - R2 KNOWN LIMITATION 段落改為「**[FIXED in M3.5 — commit {hash}]**」
+    - 加新的 FIXED finding：[MEDIUM] Multi-instance rate limit inaccuracy
+    - npm audit 結果（產出後填）
+  - `PLAN.md`：
+    - Risk Register R2 status 從 `M3 scope 不涵蓋此升級` 改為 `✅ FIXED in M3.5`
+  - `BUILD_REPORT.md`：append M3.5 round commits 區塊（pending backend/qa 完才寫）
+- **verify**:
+  - 5 個 .md 檔案長度 sanity（不超過既有 × 1.5）
+  - `git grep -E "(UPSTASH_REDIS_REST_URL|UPSTASH_REDIS_REST_TOKEN)=.{20,}"` 0 hits（無 committed secrets）
+  - bash code block 仍可執行
+- **est. LOC**: ~80
+- **verify log**: `rpb-r2-docs-verify.log`
+
+## Milestone 4 — Deploy + production verify（user Phase 0 完成後才做）
+
+- **owner**: orchestrator（我）+ user（Phase 0 提供 env）
+- **scope**:
+  - User Phase 0：Upstash 帳號 + database + env vars 設好（產出在 chat 外，已給指令）
+  - Orchestrator Phase 4：
+    1. `vercel env add UPSTASH_REDIS_REST_URL production` / `vercel env add ... preview`
+    2. `vercel env add UPSTASH_REDIS_REST_TOKEN production` / `vercel env add ... preview`
+    3. `vercel env pull .env.local`（本地也同步；**只讀、不貼 chat**）
+    4. `vercel --prod -y` redeploy
+    5. Production curl 驗證：
+       - `/api/health` HTTP 200
+       - 6 個 security headers 還在（沒被 vercel.json 新版洗掉）
+       - 連發 6 次 POST → 第 6 次 429
+       - 換 source IP（用不同 `x-forwarded-for` header）→ 不被 rate limit 擋（per-IP isolation 仍正確）
+- **verify**:
+  - 5 個 verify command 仍綠（typecheck/test/build 已驗證過；production curl 跑 4 個測試）
+- **verify log**: `rpb-r2-deploy-verify.log`
+
+## Dependencies（執行順序）
+
+```
+User Phase 0 (Upstash setup) ─────────────────┐
+                                              │
+Backend M1 (refactor) ────────────────────┐   │
+                                         │   │
+QA M2 (mock tests) ──────────────────┐   │   │
+                                      │   │   │
+                                      ▼   ▼   ▼
+                                Docs M3 (sync)
+                                      │
+                                      ▼
+                                Deploy M4 (verify)
+                                      │
+                                      ▼
+                                Final summary + mark complete
+```
+
+- **Goal Round 1**：M1（backend）+ M2（qa）可平行 — Phase 0 user 還沒完成時就開始，測試全 mock
+- **Goal Round 2**：M3（docs sync）— 等 M1 + M2 commit 後
+- **Goal Round 3**：M4（deploy）— 等 user Phase 0 完成
+- **Goal Round 4**：final summary + mark complete
+
+## Out of scope（這 round）— 明確不做
+
+- ❌ 改 `checkRateLimit` signature（破壞既有 caller）
+- ❌ 換其他 Redis library（`ioredis`、`@vercel/kv`）
+- ❌ 改 rate limit 預設值（5/60s 沿用）
+- ❌ 加 per-endpoint rate limit 設定
+- ❌ 加 dashboard / monitoring UI
+- ❌ 加 CAPTCHA / fingerprinting（防分散式 botnet）— follow-up
+- ❌ 改 PRD/SPEC.md §1-§9
+- ❌ 改既有 user data schema
+- ❌ push 任何東西到 remote（除非 user 明說）
+
+## Risk Register（這 round）
+
+| ID | Risk | Mitigation |
+|---|---|---|
+| R2-1 | `@upstash/ratelimit` 在 cold start 第一次連線慢（HTTP handshake ~100ms） | 接受；production deploy 後 warm 起來就快。或加 timeout（設 200ms timeout → fallback in-memory）。本 round 不強制做，先觀察 prod latency。 |
+| R2-2 | Free tier 10K commands/day 用完 | 5 req/min × 60 min × 24h = 7200 req/day/instance（worst case）。多實例不會超過 10K。先看實際用量再決定升級。 |
+| R2-3 | Mock Redis test 沒打到真網路，prod deploy 後才發現問題 | M4 deploy 後立刻 curl 5 個測試（health / headers / rate limit / fallback / per-IP isolation）；任一 fail 就 rollback。 |
+| R2-4 | Upstash token 進 git history | `.env.example` 只放 placeholder；`.env.local` 在 `.gitignore`；commit 前 `git grep` 確認無 UPSTASH_* 真實值。 |
+
+## Coordination Rules
+
+1. **M1 與 M2 可平行**：backend 改 `rate-limit.ts`，qa 同時改 `rate-limit.test.ts` 用 mock。M1 commit 後 M2 才 commit（避免 merge conflict）。但 dispatch 可以同步派兩個 subagent — 後 commit 的會 rebase。
+2. **M3 docs 等 M1+M2 commit 後才動**：避免引用還沒 commit 的 commit hash。
+3. **M4 deploy 等 user Phase 0 確認完成後才動**。
+4. **每個 milestone 完成後跑 verify，存 log**：`rpb-r2-<role>-verify.log`。
+5. **進度透明**：每個 builder 完成後寫 3-5 行中文 summary 到 commit message。
+
+## Final Verification Checklist
+
+- [ ] `src/lib/rate-limit.ts` 用 `@upstash/ratelimit` + in-memory fallback
+- [ ] `package.json` 加 `@upstash/redis` + `@upstash/ratelimit`
+- [ ] `npm run typecheck` exit 0
+- [ ] `npm test` exit 0（既有 107 + 新增 ≥ 4 = 111 tests）
+- [ ] `npm run test:coverage` ≥ 97% statements
+- [ ] `npm run build` exit 0
+- [ ] `.env.example` 補 UPSTASH_* placeholder
+- [ ] `README.md` / `STATUS.md` / `SECURITY_FINDINGS.md` / `BUILD_REPORT.md` / `PLAN.md` 同步
+- [ ] PLAN.md §Risk Register R2 status = ✅ FIXED
+- [ ] SECURITY_FINDINGS.md R2 = ✅ FIXED in M3.5
+- [ ] Production deploy 後 6 個 security headers 還在
+- [ ] Production curl：6 次 POST → 第 6 次 429
+- [ ] Production curl：換 IP → 不被擋
+- [ ] `git grep -E "TODO|FIXME|HACK"` 0
+- [ ] `git grep -E "UPSTASH_REDIS_(URL|TOKEN)=.{20,}"` 0（無 leak）
+- [ ] 沒 push（除非 user 明說）
