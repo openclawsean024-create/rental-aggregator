@@ -28,6 +28,7 @@ import {
   type BlacklistItem,
 } from "@/data/blacklist-store";
 import { maskLandlordName } from "@/lib/mask";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -144,6 +145,16 @@ export async function GET(request: NextRequest) {
 // =============================================================
 // POST 提交檢舉
 // =============================================================
+// 證據 URL 限縮為 http(s)：拒絕 javascript: / file: / data: / ftp: 等
+// （M3 hardening — Zod 內建 .url() 接受 javascript:alert(1) 為 valid URL，
+// 這是 XSS 風險。改用 .refine 明確只接受 http(s) scheme）
+const EvidenceUrlSchema = z
+  .string()
+  .url()
+  .refine((s) => /^https?:\/\//i.test(s), {
+    message: "evidenceUrls 必須是 http(s) URL",
+  });
+
 const PostSchema = z.object({
   landlordName: z.string().trim().min(2).max(20),
   addressDistrict: z.string().trim().min(3).max(50),
@@ -156,12 +167,37 @@ const PostSchema = z.object({
     "illegal_deduction",
   ]),
   description: z.string().trim().min(10).max(500),
-  evidenceUrls: z.array(z.string().url()).max(10).optional(),
+  evidenceUrls: z.array(EvidenceUrlSchema).max(10).optional(),
   submitterId: z.string().min(1).max(100).optional(),
 });
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit（M3 hardening）：
+    // - 在 Zod parse 之前先計數，無論 schema 是否通過都算 1 次
+    // - 避免攻擊者用 schema 試誤免費探測 endpoint
+    // - IP 從 proxy header 取（Vercel / Cloudflare），fallback 'anonymous'
+    // - 5 req / min，超過 → 429 + Retry-After
+    // - static mode 也要走（POST 是公開 endpoint）
+    const ip = getClientIp(request.headers);
+    const rl = checkRateLimit(ip);
+    if (!rl.ok) {
+      const retryAfterSec = Math.ceil(rl.resetMs / 1000);
+      return NextResponse.json(
+        {
+          error: "Too many requests, please retry later.",
+          retryAfterSec,
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(retryAfterSec),
+            "X-RateLimit-Remaining": "0",
+          },
+        },
+      );
+    }
+
     const body = await request.json();
     const parsed = PostSchema.safeParse(body);
     if (!parsed.success) {
@@ -199,10 +235,7 @@ export async function POST(request: NextRequest) {
 
     // Prisma 模式
     const { prisma } = await import("@/lib/db");
-    const ip =
-      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-      request.headers.get("x-real-ip") ??
-      "anonymous";
+    // 重用上方 rate limit 抓的 client IP（避免重複 parse header）
     const submitterId = data.submitterId ?? `anon-${ip}`;
 
     await prisma.user.upsert({

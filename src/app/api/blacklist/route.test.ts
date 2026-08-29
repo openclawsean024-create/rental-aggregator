@@ -1,17 +1,20 @@
 /**
- * /api/blacklist route handler 整合測試（M2 edge case 補強）
+ * /api/blacklist route handler 整合測試（M2 edge case 補強 + M3 hardening）
  *
  * 範圍：
  * - GET：基本查詢、空字串、SQL injection 試圖、unicode 查詢、
  *       limit 超出範圍、無效 category、district 不存在
- * - POST：缺欄位、合法 payload、javascript: URL（既有 .url() 行為紀錄）
+ * - POST：缺欄位、合法 payload、evidenceUrls scheme 過濾
+ *       （M3 新增：拒絕 javascript: / file: / data: / ftp:）+ rate limit
  *
  * 環境設定：
  * - 設 USE_BLACKLIST_STATIC=1 走 in-memory 模式（避免 Prisma 連線）
  * - setup 用 vi.stubEnv，並在 afterEach 還原
+ * - 每個 case 開始前 reset rate limit bucket（per-IP 隔離）
  */
-import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { _resetRateLimitForTests } from "@/lib/rate-limit";
 
 // 在 import route handler 之前設定 env，確保模組層級只讀 env 的邏輯正確
 // 注意：route.ts 在 import 時只讀 process.env.USE_BLACKLIST_STATIC，但
@@ -27,6 +30,13 @@ afterEach(() => {
   vi.stubEnv("USE_BLACKLIST_STATIC", "1");
   vi.stubEnv("VERCEL", "");
   vi.stubEnv("DATABASE_URL", "");
+});
+
+// 每個 test 開始前清空 rate-limit bucket，避免前一個 test 留下狀態
+// 注意：route handler 內 IP 從 x-forwarded-for 取，但測試的 makePost 沒設
+// → 都會 fallback 'anonymous' bucket。所以 'anonymous' bucket 必須 reset
+beforeEach(() => {
+  _resetRateLimitForTests();
 });
 
 function makeGet(url: string): NextRequest {
@@ -277,34 +287,73 @@ describe("/api/blacklist POST", () => {
     }
   });
 
-  it("evidenceUrls=['javascript:alert(1)'] → 既有 .url() 通過，回 202（M3 會修）", async () => {
-    // 重要：M2 只紀錄既有行為。PostSchema.evidenceUrls: z.array(z.string().url()).max(10).optional()
-    // 既有 .url() 接受 javascript:alert(1) 為 valid URL（Zod 預設）
-    // M3 會改成 .refine(s => /^https?:\/\//.test(s)) → 400
+  it("evidenceUrls=['javascript:alert(1)'] → 400（Zod refine fail，M3 hardening）", async () => {
+    // M3 變更：PostSchema.evidenceUrls 從 .url() 改成 .url().refine(/^https?:\/\//i)
+    // 拒絕 javascript: / file: / data: / ftp: 等非 http(s) scheme
     const { POST } = await import("./route");
-    const consoleSpy = vi
-      .spyOn(console, "warn")
-      .mockImplementation(() => {});
-    try {
-      const res = await POST(
-        makePost("/api/blacklist", {
-          landlordName: "王小明",
-          addressDistrict: "台北市大安區",
-          category: "deposit_dispute",
-          description: "退租時房東以各種理由拒退押金",
-          evidenceUrls: ["javascript:alert(1)"],
-        }),
-      );
-      // 既有行為：通過 Zod，static mode 回 202
-      expect(res.status).toBe(202);
-      const json = await res.json();
-      expect(json.ok).toBe(true);
-    } finally {
-      consoleSpy.mockRestore();
-    }
+    const res = await POST(
+      makePost("/api/blacklist", {
+        landlordName: "王小明",
+        addressDistrict: "台北市大安區",
+        category: "deposit_dispute",
+        description: "退租時房東以各種理由拒退押金",
+        evidenceUrls: ["javascript:alert(1)"],
+      }),
+    );
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toMatch(/Invalid payload/i);
   });
 
-  it("evidenceUrls 含 https URL → 202（合法）", async () => {
+  it("evidenceUrls=['file:///etc/passwd'] → 400（M3 hardening）", async () => {
+    const { POST } = await import("./route");
+    const res = await POST(
+      makePost("/api/blacklist", {
+        landlordName: "王小明",
+        addressDistrict: "台北市大安區",
+        category: "deposit_dispute",
+        description: "退租時房東以各種理由拒退押金",
+        evidenceUrls: ["file:///etc/passwd"],
+      }),
+    );
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toMatch(/Invalid payload/i);
+  });
+
+  it("evidenceUrls=['data:text/html,<script>...'] → 400（M3 hardening）", async () => {
+    const { POST } = await import("./route");
+    const res = await POST(
+      makePost("/api/blacklist", {
+        landlordName: "王小明",
+        addressDistrict: "台北市大安區",
+        category: "deposit_dispute",
+        description: "退租時房東以各種理由拒退押金",
+        evidenceUrls: ["data:text/html,<script>alert(1)</script>"],
+      }),
+    );
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toMatch(/Invalid payload/i);
+  });
+
+  it("evidenceUrls=['ftp://x'] → 400（M3 hardening）", async () => {
+    const { POST } = await import("./route");
+    const res = await POST(
+      makePost("/api/blacklist", {
+        landlordName: "王小明",
+        addressDistrict: "台北市大安區",
+        category: "deposit_dispute",
+        description: "退租時房東以各種理由拒退押金",
+        evidenceUrls: ["ftp://x"],
+      }),
+    );
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toMatch(/Invalid payload/i);
+  });
+
+  it("evidenceUrls 含 https URL → 202（合法，R3 不能 regress）", async () => {
     const { POST } = await import("./route");
     const consoleSpy = vi
       .spyOn(console, "warn")
@@ -341,5 +390,78 @@ describe("/api/blacklist POST", () => {
       }),
     );
     expect(res.status).toBe(400);
+  });
+});
+
+describe("/api/blacklist POST — Rate limit (M3 hardening)", () => {
+  // makePost 不設 x-forwarded-for header → server 端 fallback 'anonymous'
+  // 所有 case 共用同一個 bucket，所以必須 beforeEach 清空
+  beforeEach(() => {
+    _resetRateLimitForTests();
+  });
+
+  it("前 5 次合法 POST → 202，第 6 次 → 429", async () => {
+    const { POST } = await import("./route");
+    const payload = {
+      landlordName: "王小明",
+      addressDistrict: "台北市大安區",
+      category: "deposit_dispute" as const,
+      description: "退租時房東以各種理由拒退押金",
+    };
+
+    const statuses: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const r = await POST(makePost("/api/blacklist", payload));
+      statuses.push(r.status);
+    }
+    const sixth = await POST(makePost("/api/blacklist", payload));
+    statuses.push(sixth.status);
+
+    expect(statuses.slice(0, 5)).toEqual([202, 202, 202, 202, 202]);
+    expect(statuses[5]).toBe(429);
+  });
+
+  it("429 response 含 Retry-After header + retryAfterSec body", async () => {
+    const { POST } = await import("./route");
+    const payload = {
+      landlordName: "王小明",
+      addressDistrict: "台北市大安區",
+      category: "deposit_dispute" as const,
+      description: "退租時房東以各種理由拒退押金",
+    };
+    for (let i = 0; i < 5; i++) {
+      await POST(makePost("/api/blacklist", payload));
+    }
+    const blocked = await POST(makePost("/api/blacklist", payload));
+    expect(blocked.status).toBe(429);
+    // Retry-After header 必存在且為正整數字串
+    const retryAfter = blocked.headers.get("retry-after");
+    expect(retryAfter).not.toBeNull();
+    expect(Number(retryAfter)).toBeGreaterThan(0);
+    expect(Number(retryAfter)).toBeLessThanOrEqual(60);
+    // body 也要有 retryAfterSec
+    const json = await blocked.json();
+    expect(json.error).toMatch(/Too many requests/i);
+    expect(typeof json.retryAfterSec).toBe("number");
+    expect(json.retryAfterSec).toBeGreaterThan(0);
+  });
+
+  it("Rate limit 在 Zod parse 之前 — 即使 schema 失敗也算次數", async () => {
+    // 防 schema 試誤攻擊：故意送壞 payload 把 bucket 灌滿，
+    // 第 6 次壞 payload 也要 429（不是 400）
+    const { POST } = await import("./route");
+    const bad = {
+      landlordName: "x", // 太短
+      addressDistrict: "y",
+      category: "deposit_dispute" as const,
+      description: "z",
+    };
+    for (let i = 0; i < 5; i++) {
+      const r = await POST(makePost("/api/blacklist", bad));
+      expect(r.status).toBe(400); // Zod 拒收
+    }
+    // 第 6 次：bucket 已滿 → 429，不是 400
+    const sixth = await POST(makePost("/api/blacklist", bad));
+    expect(sixth.status).toBe(429);
   });
 });
