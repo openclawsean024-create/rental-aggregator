@@ -17,6 +17,30 @@
 
 **Orchestrator Round 1 動作**：plan 已存在 → 補上 Resume Context → commit PLAN.md → 進入 M2 接手（給 qa agent 派工）
 
+---
+
+## Status Update（Goal Round 2 結束時）
+
+| Milestone | 狀態 | 證據 |
+|---|---|---|
+| **M1 — CI workflow** | ✅ 完成 | `f6b2e12` |
+| **M2 — Edge case 測試補強** | ✅ 完成 + 已 commit | commit `b50494e`：`rpb(qa): Milestone 2 — edge case test coverage (87/87 passing)` — 4 test 檔（mask / blacklist-store / route / mask-invariant）+ `rpb-qa-verify.log`。test 數 34 → 87（+156%）。 |
+| **M3 — 安全 hardening** | 🟡 backend 派工中 | backend subagent `e7aaac91-d904-437f-9183-6ffae3f9bc4b` 正在 background 跑 rate-limit.ts + evidenceUrls refine + 對應測試。security agent 待 M3 backend 完成後接手。 |
+| **M4 — 文件同步 + BUILD_REPORT** | ⏳ 待開工 |  |
+
+**git 狀態**：`branch main ahead of origin/main by 3 commits`（M1 + PLAN + M2；皆未 push，符合 goal constraint）
+
+**已知 stderr noise（M1 baseline 既有，非 M2 引入，列為 known issue）**：
+- `TopDistricts.test.tsx` 在 fetch mock 缺漏時打真的 `localhost:3000` → ECONNREFUSED
+- `TopDistricts.test.tsx` 缺 `act()` wrap warning
+→ 都是 M1 baseline 測試品質 issue；非 M2 範圍。前端 round 再處理。
+
+**Round 2 Orchestrator 動作**：
+1. qa subagent `8b74a3fe` 在 stale build lock 時失敗，但其 87/87 test 結果已落地
+2. orchestrator 接手清掉 stale lock、重跑 verify（typecheck/test/build 全 exit 0）
+3. commit M2（`b50494e`）
+4. 派 backend 進 M3（subagent `e7aaac91`，背景跑）
+
 ## 為什麼這樣排
 
 1. **M1（CI）獨立且阻塞 M4** — 沒 CI badge 之前 docs 無法更新 README。M2/M3 不阻塞 M1。
