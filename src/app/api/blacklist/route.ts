@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
     // - 5 req / min，超過 → 429 + Retry-After
     // - static mode 也要走（POST 是公開 endpoint）
     const ip = getClientIp(request.headers);
-    const rl = checkRateLimit(ip);
+    const rl = await checkRateLimit(ip);
     if (!rl.ok) {
       const retryAfterSec = Math.ceil(rl.resetMs / 1000);
       return NextResponse.json(
