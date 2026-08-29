@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# 最小權限：只讀 contents，避免 workflow 有多餘能力。
+# 不需要寫 token / 不需要 deploy，因此不給 id-token / packages。
+permissions:
+  contents: read
+
+# 取消舊 in-flight run，避免同一 PR 多筆 push 浪費 runner。
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint / Typecheck / Test / Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # CI 不需要真的 DB connection：build-time 只需 prisma generate（讀 schema），
+      # runtime DB 連線留給 Vercel deploy 階段處理。設 placeholder 避免 Prisma client
+      # 初始化時抱怨缺少 DATABASE_URL。
+      DATABASE_URL: "postgresql://placeholder:placeholder@localhost:5432/placeholder?schema=public"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          # 用 lockfile 自動 cache npm 依賴，比自幹 cache 快。
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        # --legacy-peer-deps 對齊 vercel.json installCommand（避免 React 19 / Next 16 peer 衝突）
+        run: npm ci --legacy-peer-deps
+
+      - name: Generate Prisma Client
+        # 獨立 step 讓 prisma schema 錯誤在進入 webpack 之前就 fail-fast；
+        # npm run build 內已含 prisma generate，這裡只是提早暴露錯誤。
+        run: npm run db:generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run unit tests (vitest)
+        run: npm test
+
+      - name: Build (Next.js webpack)
+        # 不加 --webpack 旗：package.json build script 已固定 `next build --webpack`
+        # （Turbopack 有 nft.json bug，見 STATUS.md §踩過的坑 #3）
+        run: npm run build

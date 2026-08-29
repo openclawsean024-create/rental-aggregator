@@ -1,0 +1,70 @@
+=== YAML syntax check (python yaml.safe_load) ===
+exit=0
+
+=== actionlint ===
+actionlint not installed, skipping (optional check)
+
+=== file listing ===
+-rw-------@ 1 sean  staff  1992 Aug 29 22:07 .github/workflows/ci.yml
+
+=== yaml head ===
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# 最小權限：只讀 contents，避免 workflow 有多餘能力。
+# 不需要寫 token / 不需要 deploy，因此不給 id-token / packages。
+permissions:
+  contents: read
+
+# 取消舊 in-flight run，避免同一 PR 多筆 push 浪費 runner。
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+
+=== Structural parse check (yaml.safe_load + introspection) ===
+name: CI
+on triggers: ['push', 'pull_request']
+permissions: {'contents': 'read'}
+concurrency: {'group': 'ci-${{ github.workflow }}-${{ github.ref }}', 'cancel-in-progress': True}
+jobs: ['verify']
+  - runs-on: ubuntu-latest
+  - timeout-minutes: 10
+  - step count: 7
+    1. uses: actions/checkout@v4
+    2. uses: actions/setup-node@v4
+    3. run: npm ci --legacy-peer-deps
+    4. run: npm run db:generate
+    5. run: npm run typecheck
+    6. run: npm test
+    7. run: npm run build
+
+=== Required-step presence check ===
+  [OK] npm ci
+  [OK] db:generate
+  [OK] typecheck
+  [OK] npm test
+  [OK] npm run build
+
+=== Action pin check (must be @vN not @main) ===
+  [OK] actions/checkout@v4 -> @version=v4
+  [OK] actions/setup-node@v4 -> @version=v4
+
+=== Secret leak scan (regex sweep) ===
+  hits: none
+
+=== Summary ===
+- YAML syntax: PASS (exit 0)
+- Structure: PASS (jobs=verify, 7 steps, all required steps present)
+- Action pins: PASS (@v4 not @main)
+- Secrets in YAML: PASS (no token/key/secret patterns)
+- actionlint: SKIPPED (not installed locally)
+- permissions: minimum (contents: read only)
+- concurrency: cancel-in-progress enabled
