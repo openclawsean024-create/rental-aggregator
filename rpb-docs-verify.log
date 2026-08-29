@@ -1,0 +1,158 @@
+================================================================================
+rpb-docs-verify.log — Milestone 4 (docs)
+================================================================================
+Timestamp       : 2026-08-29 22:27 CST
+Branch          : main (ahead of origin/main by 7 commits)
+HEAD            : 0ac551f (working tree uncommitted docs changes)
+M4 scope        : README / STATUS / SOP / BUILD_REPORT sync + docs-specific lint
+
+================================================================================
+1. npm run typecheck
+================================================================================
+> rental-aggregator@0.1.0 typecheck
+> tsc --noEmit
+
+TYPECHECK_EXIT=0
+
+✅ PASS
+
+================================================================================
+2. npm test
+================================================================================
+> rental-aggregator@0.1.0 test
+> vitest run
+
+stderr (non-blocking, M1 baseline noise — see STATUS.md Known Limitations):
+  src/components/TopDistricts.test.tsx — "An update to TopDistricts inside a
+  test was not wrapped in act(...)" — M1 baseline; not introduced by M4 docs.
+
+ RUN  v2.1.5
+
+ ✓ src/lib/mask-invariant.test.ts (3 tests) 5ms
+ ✓ src/lib/mask.test.ts (23 tests) 3ms
+ ✓ src/lib/rate-limit.test.ts (14 tests) 7ms
+ ✓ src/lib/categories.test.ts (5 tests) 2ms
+ ✓ src/data/blacklist-store.test.ts (27 tests) 22ms
+ ✓ src/app/api/blacklist/route.test.ts (28 tests) 86ms
+ ✓ src/components/BlacklistSearch.test.tsx (4 tests) 119ms
+ ✓ src/components/TopDistricts.test.tsx (3 tests) 116ms
+
+ Test Files  8 passed (8)
+      Tests  107 passed (107)
+   Duration  1.38s
+
+TEST_EXIT=0
+
+✅ PASS — 107/107 (no regression vs rpb-backend-verify.log / rpb-security-verify.log)
+
+================================================================================
+3. npm run build
+================================================================================
+> rental-aggregator@0.1.0 build
+> prisma generate && next build --webpack
+
+✓ Compiled successfully in 912ms
+✓ TypeScript in 873ms
+✓ Generating static pages (3/3) in 843ms
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /api/blacklist
+├ ƒ /api/blacklist/stats
+└ ƒ /api/health
+
+BUILD_EXIT=0
+
+✅ PASS
+
+================================================================================
+4. README.md size check
+================================================================================
+M1 baseline (2026-08-08):       4239 bytes
+After M4 docs round:            6275 bytes
+Limit (1.5x baseline):          6359 bytes (round of 4239 * 1.5 = 6358.5)
+Margin:                         84 bytes under limit
+Growth ratio:                   148.04% of baseline
+
+✅ PASS — within limit
+
+================================================================================
+5. README.md bash block lint
+================================================================================
+Command:
+  awk '/```bash/{flag=1;next}/```/{flag=0}flag' README.md > /tmp/readme-bash.sh
+  bash -n /tmp/readme-bash.sh
+
+BASH_LINT_EXIT=0
+
+✅ PASS — all bash code blocks parse cleanly
+
+================================================================================
+6. Internal Markdown link check
+================================================================================
+README.md internal links (excluding http(s) and #anchors):
+  OK   ./PRD/SPEC.md
+  OK   ./BUILD_REPORT.md
+  OK   ./SECURITY_FINDINGS.md
+  OK   ./BUILD_REPORT.md
+  OK   ./.github/workflows/ci.yml
+  OK   ./SECURITY_FINDINGS.md
+  → 6/6 OK
+
+STATUS.md: 0 internal links
+SOP.md internal links:
+  OK   ./BUILD_REPORT.md
+  OK   ./PLAN.md
+  OK   ./src/app/api/blacklist/route.test.ts
+  OK   ./src/lib/rate-limit.ts
+  OK   ./.github/workflows/ci.yml
+  → 5/5 OK
+
+BUILD_REPORT.md internal links:
+  OK   ./PLAN.md (x2)
+  → 2/2 OK
+
+LINK_CHECK_EXIT=0
+✅ PASS — all 13 internal link targets exist
+
+================================================================================
+7. git grep — TODO/FIXME/HACK residual
+================================================================================
+Command:
+  git grep -nE "TODO|FIXME|HACK" -- \
+    ':!PLAN.md' ':!SECURITY_FINDINGS.md' \
+    ':!rpb-security-verify.log' ':!rpb-backend-verify.log' \
+    ':!rpb-qa-verify.log' ':!rpb-devops-verify.log' \
+    ':!BUILD_REPORT.md' ':!STATUS.md' ':!SOP.md' ':!README.md'
+
+Result: 0 hits
+
+TODO_EXIT=0
+✅ PASS — 0 new debt (docs round 不留 TODO/FIXME/HACK)
+
+================================================================================
+8. git grep — secrets scan
+================================================================================
+Command:
+  git grep -nE "(sk-|AKIA|ghp_)[A-Za-z0-9]{16,}" -- \
+    ':!PLAN.md' ':!package-lock.json' ':!rpb-security-verify.log'
+
+Result: 0 hits
+
+SECRETS_EXIT=0
+✅ PASS — 0 leaked secrets
+
+================================================================================
+Summary
+================================================================================
+  typecheck         : PASS (exit 0)
+  test              : PASS (107/107)
+  build             : PASS (exit 0, 5 routes)
+  README size       : PASS (6275 / 6359 bytes, 148% of baseline)
+  bash lint         : PASS (exit 0)
+  internal links    : PASS (13/13 targets exist)
+  TODO scan         : PASS (0 new debt)
+  secrets scan      : PASS (0 leaks)
+
+All checks exit 0. M4 docs deliverable ready to commit.

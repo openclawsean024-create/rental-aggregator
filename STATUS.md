@@ -1,8 +1,9 @@
 # rental-aggregator 狀態
 
 > 2026-08-08 (Hermes Agent 接手)
+> 2026-08-29 (M1 Hardening round — M1+M2+M3, 7 commits ahead of origin/main)
 
-## M1 黑名單 MVP ✅ 完成 + Production Verified
+## M1 黑名單 MVP ✅ 完成 + Production Verified（2026-08-08）
 
 ### production 驗證結果（11/11 通過）
 
@@ -67,6 +68,38 @@ https://rental-aggregator-three.vercel.app
 5. **postinstall prisma generate 在 install 階段 fail** → 移除，靠 build script 第一行 prisma generate
 6. **Vercel CLI 印 `▲ Aliased` 但 alias 仍指舊 deployment** → 用 Vercel HTTP API 顯式 POST `/v2/deployments/{id}/aliases` 把 alias 指到新 deployment
 7. **isStaticMode() 看似沒 work** → 真正原因是 alias 沒更新，serverless function 仍跑舊 deployment；用 `/api/debug` 端點 trace 出來
+
+---
+
+## M1 Hardening round（M2/M3）— 2026-08-29
+
+> 從「能跑」推進到「production-ready」。本輪 7 commits ahead of origin/main，皆未 push（goal constraint）。
+
+### 本輪做的事（依時序）
+
+| Commit | Owner | 內容 |
+|---|---|---|
+| `f6b2e12` | devops | 新增 `.github/workflows/ci.yml`：Node 22、push/PR trigger、permissions: contents read、concurrency cancel-in-progress、order: `db:generate` → `typecheck` → `test` → `build`（10 分鐘 timeout） |
+| `b20ab4c` | orchestrator | PLAN.md with Resume Context（Goal Round 1）— 拆出 M1~M4 與 owner 對應 |
+| `b50494e` | qa | Milestone 2 — edge case 測試（87/87 passing）：`src/lib/mask.test.ts`（23 tests）+ `src/data/blacklist-store.test.ts`（27 tests）+ `src/app/api/blacklist/route.test.ts`（route 整合測試）+ `src/lib/mask-invariant.test.ts`（ADR-002 靜態守衛）|
+| `bf5d49b` | orchestrator | PLAN.md status update（M2 done, M3 backend in flight） |
+| `23e7683` | backend | M3 hardening — 新增 `src/lib/rate-limit.ts`（per-IP sliding window 5 req/min，100% coverage）+ POST handler 套 rate limit（429 + `Retry-After`）+ `evidenceUrls` scheme allowlist（`/^https?:\/\//i`）|
+| `6b575b2` | orchestrator | PLAN.md status update（M3 backend done, security in flight） |
+| `0ac551f` | security | M3 hardening — `vercel.json` 加 6 個 security headers（CSP / X-Frame-Options DENY / HSTS / Referrer-Policy / Permissions-Policy / X-Content-Type-Options）+ 產出 `SECURITY_FINDINGS.md`（0 critical / 1 HIGH / 2 MEDIUM / 1 KNOWN LIMITATION）|
+
+### Test 數 / Coverage 對比
+
+| 指標 | M1 baseline (2026-08-08) | M3 結束 (2026-08-29) | 變化 |
+|---|---|---|---|
+| Test files | 4 | 8 | +4（mask-invariant / rate-limit / route / blacklist-store 擴充）|
+| Tests | 22 | 107 | +85（+386%）|
+| Coverage statements | 95.09% | 97.16% | +2.07pp |
+
+### Known Limitations（本輪驗出，留後續 round）
+
+- **PLAN.md R2 — Rate limit in-memory 多實例不精確** — `src/lib/rate-limit.ts` 每個 serverless instance 各自計數；cold start 後 Map 會被清空。Production 升級路：Upstash Redis / Vercel KV / Cloudflare edge token bucket。M3 scope 不涵蓋升級（見 `SECURITY_FINDINGS.md` KNOWN LIMITATION 區塊 + `rpb-backend-verify.log`）。
+- **`TopDistricts.test.tsx` 的 `act()` wrap 警告 + `localhost:3000` ECONNREFUSED 訊息** — M1 baseline 既有（測試 mock 缺漏時 fallback 打 real fetch）；非 M2/M3 round 引入。Frontend round 再處理（要嘛補 mock、要嘛 wrap act()）。
+- **`npm audit` 含 devDependencies** 12 個 moderate+ 漏洞（happy-dom critical / postcss high 等），皆不進 production bundle，升級涉及 React 19 / Next 16 peer deps 風險，**留獨立 round 評估**（`SECURITY_FINDINGS.md` npm audit 段落）。
 
 ## 下一階段：M2 屋況清單 + 租約產生器
 
