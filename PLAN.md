@@ -72,6 +72,37 @@
 2. orchestrator 獨立重跑 verify 三個 command（typecheck/test/build 全 exit 0，test 107/107）— 確認 backend 報告可信
 3. 派 security 進 M3 第二段（subagent `09417c70`，背景跑）
 
+---
+
+## Status Update（Goal Round 4 — M3 全完成 + M4 派工）
+
+| Milestone | 狀態 | 證據 |
+|---|---|---|
+| **M1 — CI workflow** | ✅ 完成 | `f6b2e12` |
+| **M2 — Edge case 測試補強** | ✅ 完成 | `b50494e` |
+| **M3 backend — rate-limit + evidenceUrls** | ✅ 完成 | `23e7683` |
+| **M3 security — vercel.json headers + SECURITY_FINDINGS** | ✅ 完成 + 已 commit | commit `0ac551f`：`rpb(security): M3 hardening — security headers + SECURITY_FINDINGS` — 3 檔（SECURITY_FINDINGS.md 215 行、rpb-security-verify.log 303 行、vercel.json +14 行 6 headers）。FINDINGS: 0 critical / 1 HIGH fixed / 2 MEDIUM fixed / 1 KNOWN LIMITATION。npm audit --omit=dev 0 漏洞。 |
+| **M4 — 文件同步 + BUILD_REPORT** | 🟡 派工中 | docs subagent `d37daf6e-f667-4049-9cd2-c137cabfe948` 正在 background 跑 README badges + STATUS + SOP + 新增 BUILD_REPORT.md |
+
+**git 狀態**：`branch main ahead of origin/main by 7 commits`（皆未 push，符合 goal constraint）
+
+**M3 security verify（orchestrator 獨立重跑確認）**：
+- typecheck EXIT=0
+- test 107/107 passed（8 files，1.04s）— M3 backend baseline 不變
+- build EXIT=0，5 routes
+- vercel.json 6 security headers 已生效（CSP 可運行版本 / X-Frame-Options DENY / HSTS / Referrer-Policy / Permissions-Policy / X-Content-Type-Options）
+
+**M3 security 重點產出**：
+- SECURITY_FINDINGS.md：完整 OWASP Top 10 檢視 + 4 findings（critical/high/medium/known limitation）+ CSP 設計理由
+- vercel.json：保留既有 build config（不破 build），新增 headers 區塊覆蓋 `/(.*)`
+- npm audit：prod 0 漏洞；dev 12 個 moderate+ 留 follow-up
+- R2 known limitation 紀錄完整
+
+**Round 4 Orchestrator 動作**：
+1. security subagent `09417c70` 回報 M3 security 完成（commit 0ac551f）
+2. orchestrator 獨立重跑 verify 三個 command（typecheck/test/build 全 exit 0）— 確認 security 報告可信
+3. 派 docs 進 M4（subagent `d37daf6e`，背景跑）
+
 ## 為什麼這樣排
 
 1. **M1（CI）獨立且阻塞 M4** — 沒 CI badge 之前 docs 無法更新 README。M2/M3 不阻塞 M1。
