@@ -41,6 +41,37 @@
 3. commit M2（`b50494e`）
 4. 派 backend 進 M3（subagent `e7aaac91`，背景跑）
 
+---
+
+## Status Update（Goal Round 3 中段 — backend 完成 + security 派工）
+
+| Milestone | 狀態 | 證據 |
+|---|---|---|
+| **M1 — CI workflow** | ✅ 完成 | `f6b2e12` |
+| **M2 — Edge case 測試補強** | ✅ 完成 | `b50494e` |
+| **M3 backend — rate-limit + evidenceUrls refine** | ✅ 完成 + 已 commit | commit `23e7683`：`rpb(backend): M3 hardening — rate limit + evidenceUrls scheme allowlist` — 5 檔（rate-limit.ts 新檔、rate-limit.test.ts 新檔 14 unit tests、route.ts POST 套 rate limit、route.test.ts +6 case、rpb-backend-verify.log） |
+| **M3 security — vercel.json headers + SECURITY_FINDINGS.md** | 🟡 派工中 | security subagent `09417c70-ab2e-413e-9699-f3873248516c` 正在 background 跑 vercel.json headers + SECURITY_FINDINGS.md + npm audit |
+| **M4 — 文件同步 + BUILD_REPORT** | ⏳ 待開工 |  |
+
+**git 狀態**：`branch main ahead of origin/main by 5 commits`（M1 + 2× PLAN + M2 + M3 backend；皆未 push）
+
+**M3 backend verify（orchestrator 獨立重跑確認）**：
+- typecheck EXIT=0
+- test 107/107 passed（8 files，1.13s）— M2 baseline 87 + M3 backend +20
+- build EXIT=0，5 routes
+
+**M3 backend 重點產出**：
+- `src/lib/rate-limit.ts`（127 行）— per-IP sliding window 5 req/min，附 R2 Vercel 多實例已知限制 JSDoc
+- `src/lib/rate-limit.test.ts`（167 行，14 unit tests）— 100% coverage
+- POST `/api/blacklist`：Zod parse 之前先 `checkRateLimit(ip)`，避免 schema 試誤攻擊
+- `evidenceUrls`：`.url()` → `.url().refine(/^https?:\/\//i)` — 拒絕 javascript: / file: / data: / ftp:
+- coverage 97.16% statements
+
+**Round 3 Orchestrator 動作**：
+1. backend subagent `e7aaac91` 回報 M3 backend 完成（commit 23e7683）
+2. orchestrator 獨立重跑 verify 三個 command（typecheck/test/build 全 exit 0，test 107/107）— 確認 backend 報告可信
+3. 派 security 進 M3 第二段（subagent `09417c70`，背景跑）
+
 ## 為什麼這樣排
 
 1. **M1（CI）獨立且阻塞 M4** — 沒 CI badge 之前 docs 無法更新 README。M2/M3 不阻塞 M1。
