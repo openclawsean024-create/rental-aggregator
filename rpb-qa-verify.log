@@ -1,0 +1,129 @@
+============================================================
+rpb-qa-verify.log — M2 Edge case test coverage
+Goal Round 2/256 — Orchestrator rerun (qa subagent died on stale build lock)
+Date: 2026-08-29 22:12:34
+============================================================
+
+============================================================
+## 1. npm run typecheck
+============================================================
+
+> rental-aggregator@0.1.0 typecheck
+> tsc --noEmit
+
+---END TYPECHECK---  exit=0
+
+============================================================
+## 2. npm test (vitest)
+============================================================
+
+> rental-aggregator@0.1.0 test
+> vitest run
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.5 /Users/sean/Documents/Agent space/prompts/rental-aggregator/.clone
+
+ ✓ src/lib/mask-invariant.test.ts (3 tests) 4ms
+ ✓ src/lib/categories.test.ts (5 tests) 2ms
+ ✓ src/lib/mask.test.ts (23 tests) 10ms
+ ✓ src/data/blacklist-store.test.ts (27 tests) 17ms
+ ✓ src/app/api/blacklist/route.test.ts (22 tests) 65ms
+stderr | src/components/TopDistricts.test.tsx > TopDistricts > fetch 失敗時不 crash（loading 維持不刪）
+An update to TopDistricts inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/TopDistricts.test.tsx > TopDistricts > fetch 失敗時不 crash（loading 維持不刪）
+AggregateError: 
+    at internalConnectMultiple (node:net:1135:18)
+    at afterConnectMultiple (node:net:1716:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED ::1:3000
+        at createConnectionError (node:net:1679:14)
+        at afterConnectMultiple (node:net:1709:16) {
+      errno: -61,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 3000
+    },
+    Error: connect ECONNREFUSED 127.0.0.1:3000
+        at createConnectionError (node:net:1679:14)
+        at afterConnectMultiple (node:net:1709:16) {
+      errno: -61,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 3000
+    }
+  ]
+}
+
+ ✓ src/components/TopDistricts.test.tsx (3 tests) 109ms
+ ✓ src/components/BlacklistSearch.test.tsx (4 tests) 68ms
+
+ Test Files  7 passed (7)
+      Tests  87 passed (87)
+   Start at  22:12:35
+   Duration  862ms (transform 222ms, setup 664ms, collect 497ms, tests 274ms, environment 1.65s, prepare 383ms)
+
+---END TEST---  exit=0
+
+============================================================
+## 3. npm run build
+============================================================
+
+> rental-aggregator@0.1.0 build
+> prisma generate && next build --webpack
+
+Prisma schema loaded from prisma/schema.prisma
+
+✔ Generated Prisma Client (v5.22.0) to ./node_modules/@prisma/client in 35ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Help us improve the Prisma ORM for everyone. Share your feedback in a short 2-min survey: https://pris.ly/orm/survey/release-5-22
+
+▲ Next.js 16.3.0 (webpack)
+✓ Running next.config.mjs took 6ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 639ms
+  Running TypeScript ...
+  Finished TypeScript in 992ms ...
+  Collecting page data using 7 workers ...
+  Generating static pages using 7 workers (0/3) ...
+✓ Generating static pages using 7 workers (3/3) in 215ms
+  Finalizing page optimization ...
+  Collecting build traces ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /api/blacklist
+├ ƒ /api/blacklist/stats
+└ ƒ /api/health
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+---END BUILD---  exit=0
+
+============================================================
+## Summary
+============================================================
+typecheck exit: 0
+test exit:      0
+build exit:     0
+
+✅ ALL GREEN — M2 verify passed

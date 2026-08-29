@@ -2,11 +2,13 @@
  * Static blacklist store 測試
  * 用途：M1 production fallback（Vercel serverless filesystem read-only）
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   searchApproved,
   getStats,
   getAllApproved,
+  isStaticMode,
+  recordSubmission,
 } from "./blacklist-store";
 
 describe("static blacklist store", () => {
@@ -132,6 +134,215 @@ describe("static blacklist store", () => {
         (d) => d.district === "台北市大安區",
       );
       expect(daan).toBeDefined();
+    });
+  });
+
+  // ============================================================
+  // M2 edge case — isStaticMode env 組合矩陣
+  // 注意：因 blacklist-store.ts 在 module load 時已經 import blacklist.json
+  // 且內部只讀 process.env 在函式內，這裡用 vi.stubEnv + vi.unstubAllEnvs 處理
+  // ============================================================
+  describe("M2 edge case — isStaticMode env 組合", () => {
+    it("無 USE_BLACKLIST_STATIC、無 VERCEL → 預設 false（dev 模式）", () => {
+      vi.stubEnv("USE_BLACKLIST_STATIC", "");
+      vi.stubEnv("VERCEL", "");
+      vi.stubEnv("DATABASE_URL", "");
+      expect(isStaticMode()).toBe(false);
+    });
+
+    it("USE_BLACKLIST_STATIC=1 → true（不論其他 env）", () => {
+      vi.stubEnv("USE_BLACKLIST_STATIC", "1");
+      vi.stubEnv("VERCEL", "");
+      vi.stubEnv("DATABASE_URL", "");
+      expect(isStaticMode()).toBe(true);
+    });
+
+    it("VERCEL=1 + DATABASE_URL=postgresql://... → false（真實 Postgres）", () => {
+      vi.stubEnv("USE_BLACKLIST_STATIC", "");
+      vi.stubEnv("VERCEL", "1");
+      vi.stubEnv(
+        "DATABASE_URL",
+        "postgresql://user:pass@host:5432/db",
+      );
+      expect(isStaticMode()).toBe(false);
+    });
+
+    it("VERCEL=1 + DATABASE_URL=postgres://... → false（真實 Postgres，postgres:// 前綴也接受）", () => {
+      vi.stubEnv("USE_BLACKLIST_STATIC", "");
+      vi.stubEnv("VERCEL", "1");
+      vi.stubEnv(
+        "DATABASE_URL",
+        "postgres://user:pass@host:5432/db",
+      );
+      expect(isStaticMode()).toBe(false);
+    });
+
+    it("VERCEL=1 + DATABASE_URL= 空字串 → true（Vercel 預設 fallback）", () => {
+      vi.stubEnv("USE_BLACKLIST_STATIC", "");
+      vi.stubEnv("VERCEL", "1");
+      vi.stubEnv("DATABASE_URL", "");
+      expect(isStaticMode()).toBe(true);
+    });
+
+    it("VERCEL=1 + DATABASE_URL=file:./dev.db → true（Vercel 看到 file:// 走 static）", () => {
+      vi.stubEnv("USE_BLACKLIST_STATIC", "");
+      vi.stubEnv("VERCEL", "1");
+      vi.stubEnv("DATABASE_URL", "file:./dev.db");
+      expect(isStaticMode()).toBe(true);
+    });
+
+    it("VERCEL=1 + DATABASE_URL 含 'placeholder' → true", () => {
+      vi.stubEnv("USE_BLACKLIST_STATIC", "");
+      vi.stubEnv("VERCEL", "1");
+      vi.stubEnv("DATABASE_URL", "postgresql://placeholder:5432/db");
+      expect(isStaticMode()).toBe(true);
+    });
+  });
+
+  // ============================================================
+  // M2 edge case — searchApproved filter 行為
+  // ============================================================
+  describe("M2 edge case — searchApproved filter 行為", () => {
+    it("全空字串參數 → 回傳所有 approved", () => {
+      const all = getAllApproved();
+      const result = searchApproved({
+        q: "",
+        district: "",
+        category: "",
+        limit: 20,
+        offset: 0,
+      });
+      expect(result.total).toBe(all.length);
+      expect(result.items.length).toBeLessThanOrEqual(20);
+    });
+
+    it("q 含 SQL injection 試圖 '%'; DROP TABLE-- → 不 throw，正常 filter", () => {
+      expect(() =>
+        searchApproved({
+          q: "%'; DROP TABLE--",
+          limit: 20,
+          offset: 0,
+        }),
+      ).not.toThrow();
+      // in-memory 過濾，沒有 SQL 風險，純字串 contains
+      const result = searchApproved({
+        q: "%'; DROP TABLE--",
+        limit: 20,
+        offset: 0,
+      });
+      expect(result.total).toBe(0);
+    });
+
+    it("q 含 unicode '王○' → 正常 filter", () => {
+      const result = searchApproved({
+        q: "王",
+        district: "",
+        category: "",
+        limit: 50,
+        offset: 0,
+      });
+      // 大部分 entry 都含 '王'
+      expect(result.total).toBeGreaterThan(0);
+      for (const item of result.items) {
+        expect(item.landlordName).toContain("王");
+      }
+    });
+
+    it("district = '不存在區' → total = 0", () => {
+      const result = searchApproved({
+        q: "",
+        district: "不存在區",
+        category: "",
+        limit: 20,
+        offset: 0,
+      });
+      expect(result.total).toBe(0);
+      expect(result.items.length).toBe(0);
+    });
+
+    it("category = 'invalid_category' → total = 0（嚴格 enum 對齊）", () => {
+      const result = searchApproved({
+        q: "",
+        district: "",
+        category: "invalid_category",
+        limit: 20,
+        offset: 0,
+      });
+      expect(result.total).toBe(0);
+    });
+  });
+
+  // ============================================================
+  // M2 edge case — recordSubmission
+  // ============================================================
+  describe("M2 edge case — recordSubmission", () => {
+    it("static mode：回傳 fake pending ID + 正確 payload mirror", () => {
+      const consoleSpy = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+      try {
+        const result = recordSubmission({
+          landlordName: "王○明",
+          addressDistrict: "台北市大安區",
+          category: "deposit_dispute",
+          description: "退租時房東以各種理由拒退押金",
+        });
+        expect(result.id).toMatch(/^static-\d+-[a-z0-9]+$/);
+        expect(result.status).toBe("pending");
+        expect(result.landlordName).toBe("王○明");
+        expect(result.addressDistrict).toBe("台北市大安區");
+        expect(consoleSpy).toHaveBeenCalled();
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+
+    it("recordSubmission 帶 evidenceUrls → console.warn payload 內含 urls", () => {
+      const consoleSpy = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+      try {
+        recordSubmission({
+          landlordName: "陳○君",
+          addressDistrict: "新北市板橋區",
+          category: "fake_listing",
+          description: "照片與實際屋況差很大",
+          evidenceUrls: ["https://example.com/evidence1.jpg"],
+        });
+        expect(consoleSpy).toHaveBeenCalledWith(
+          expect.stringContaining("[blacklist-store]"),
+          expect.objectContaining({
+            payload: expect.objectContaining({
+              evidenceUrls: ["https://example.com/evidence1.jpg"],
+            }),
+          }),
+        );
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+
+    it("recordSubmission 連發兩次 → ID 不重複（Math.random 防碰撞）", () => {
+      const consoleSpy = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+      try {
+        const a = recordSubmission({
+          landlordName: "王○明",
+          addressDistrict: "台北市大安區",
+          category: "deposit_dispute",
+          description: "退租時房東以各種理由拒退押金",
+        });
+        const b = recordSubmission({
+          landlordName: "陳○君",
+          addressDistrict: "新北市板橋區",
+          category: "fake_listing",
+          description: "照片與實際屋況差很大",
+        });
+        expect(a.id).not.toBe(b.id);
+      } finally {
+        consoleSpy.mockRestore();
+      }
     });
   });
 });
