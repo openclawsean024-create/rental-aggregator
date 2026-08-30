@@ -503,3 +503,58 @@ QA M2 (mock tests) ──────────────────┐   �
 - [ ] `git grep -E "TODO|FIXME|HACK"` 0
 - [ ] `git grep -E "UPSTASH_REDIS_(URL|TOKEN)=.{20,}"` 0（無 leak）
 - [ ] 沒 push（除非 user 明說）
+
+---
+
+# 🏁 R2 Final Status — goal-aaed0fc0 close-out（2026-08-30）
+
+| Milestone | 狀態 | 證據 |
+|---|---|---|
+| **M1 — Backend refactor** | ✅ done | commit `9ea4901` `rpb(backend): R2 M1 — rate-limit Upstash Redis + in-memory fallback`（rate-limit.ts 236 行、route.ts +1 line、.env.example +7 lines、@upstash/redis 2.4KB + @upstash/ratelimit 11.7KB gzipped） |
+| **M2 — QA mock tests** | ✅ done | commit `7705758` `rpb(qa): R2 M2 — mock-based rate-limit tests`（14 refactored + 4 new mock-based cases；coverage rate-limit.ts 100%） |
+| **M3 — Docs sync** | ✅ done | commit `f14965c` `rpb(docs): R2 M3 — file sync (README/STATUS/SECURITY_FINDINGS/BUILD_REPORT/PLAN)`（5 .md updated，R2 status ✅ FIXED in 5 個檔案一致） |
+| **M4 — Deploy + prod verify** | ⏳ **deferred to next goal**（user Phase 0 + token refresh needed） | — |
+
+**Total commits**：`main` ahead of `origin/main` = **14 commits**（10 M1 Hardening + 4 R2 round），皆未 push。
+
+## Success Criteria 驗收對照（goal-aaed0fc0 §Success Criteria）
+
+| # | 條件 | 結果 |
+|---|---|---|
+| 1 | 4 verify command 全綠 | ✅ typecheck / test 111-111 / build / coverage 97.4% 全綠 |
+| 2 | 不破壞現有功能 | ✅ route.ts 唯一變更是 `await` 一個字；107 → 111 tests（含 4 新）；既有 caller 仍 work |
+| 3 | rate-limit.ts 重構 | ✅ Upstash Redis primary + in-memory fallback；三層 graceful degradation（env 未設 / init throw / runtime throw） |
+| 4 | 測試覆蓋 ≥ 4 new case | ✅ Redis happy / over limit / down fallback / init failure；coverage rate-limit.ts 100% |
+| 5 | 文件同步 | ✅ README 7523 / STATUS 8198 / SECURITY_FINDINGS 15791 / BUILD_REPORT 9125 / PLAN 29808 全部更新；R2 標 ✅ FIXED |
+| 6 | **部署驗證** | ⏳ **deferred** — see "M4 deferral reason" |
+| 7 | Code quality | ✅ 0 TODO/FIXME/HACK / 0 secrets leak / 0 console.log pollution |
+
+## Constraints 對照
+
+| 約束 | 結果 |
+|---|---|
+| 不要 push | ✅ 14 commits 全本地 |
+| 不要改 PRD/SPEC.md §1-§9 | ✅ 沒動 |
+| 不要改 checkRateLimit signature | ✅ 維持相同 signature（從 sync 變 async — caller 已是 async function 且 brief 已預先授權） |
+| 不要 production 預設關 Redis fallback | ✅ Redis 不可達時仍 fallback in-memory |
+| 不要 commit UPSTASH_* 真實 credentials | ✅ `.env.example` 只有 placeholder；`.env.local` 不進 git |
+| 不要改既有 schema | ✅ Prisma 未動 |
+| 不要跳過驗收 | ✅ 每個 milestone 都有 verify log |
+
+## M4 deferral reason
+
+User Phase 0（Upstash Redis setup + env vars 設到 Vercel）尚未完成 + Vercel CLI token 過期（expires 7 hours ago at 2026-08-30T07:36Z）。雖然 production 可隨時 deploy（graceful fallback 保證不掛），但 success criteria #6「5 POST → 202, 第 6 POST → 429, **多實例下也正確**」需 Redis 連線才能驗證。
+
+M4 將在 user Phase 0 完成 + token refresh 後另開新 goal 處理。R2 round 的「code closure」是完整的（3/4 milestones + 6/7 success criteria），**只有 deploy closure 留 follow-up**。
+
+## Follow-up: M4 deploy goal（next）
+
+When user completes Upstash setup：
+1. `vercel login`（refresh token）
+2. `vercel env add UPSTASH_REDIS_REST_URL production` / `preview`
+3. `vercel env add UPSTASH_REDIS_REST_TOKEN production` / `preview`
+4. `vercel env pull .env.local`（同步本地）
+5. `vercel --prod -y` deploy
+6. Production curl：5 POST → 202, 第 6 POST → 429, 換 IP → 不擋
+7. Verify 6 個 security headers 仍 in place
+8. Commit R2 final deploy SHA to PLAN.md + BUILD_REPORT.md
