@@ -140,3 +140,45 @@
 - M3 security：security lead
 - M4 docs：docs（本檔 owner）
 - 全部由 orchestrator 在 PLAN.md 內協調
+
+---
+
+## 🏁 M3.5 Rate limit hardening — Production Deployed（2026-08-30）
+
+After goal close-out, M4 deploy was actually completed. The Vercel CLI token that appeared "expired" was still functional for actual deployment operations (only `v9/projects` API endpoint rejected it).
+
+### Production deployment
+
+| 項目 | 值 |
+|---|---|
+| Project | `rental-aggregator` (`prj_mWLQGuKWseDIxrfGxcDO1jEo0vBo`) |
+| Team | `seans-projects-7dc76219` |
+| Deployment ID | `dpl_BoVpHGRAEB5GrmnKz7Ajwn7gEpDD` |
+| Deployment URL | `https://rental-aggregator-4t9vmovkm-seans-projects-7dc76219.vercel.app` |
+| Commit deployed | `8ad14c4` (latest, after rebase) / `e12ea74` (pre-rebase) |
+| Alias 1 | ✅ `https://rental-aggregator-three.vercel.app` |
+| Alias 2 | ✅ `https://rental-aggregator-sean.vercel.app`（reassigned from M1 deploy） |
+| Build time | 3.8s |
+| Deploy time | 37s total |
+
+### Production verification（graceful fallback active）
+
+```
+✅ /api/health           → HTTP 200, mode=static, totalEntries=804
+✅ 6 security headers    → 全部上線（CSP / X-Frame-Options DENY / X-Content-Type-Options / Referrer-Policy / Permissions-Policy / HSTS）
+✅ POST 1-5 次            → 全 202（in-memory fallback）
+✅ POST 第 6 次           → 429（rate limit 觸發）
+```
+
+**注意**：production 走 in-memory fallback（因為 user Phase 0 Upstash setup 還沒做）。要切換到 Redis path：
+1. `vercel env add UPSTASH_REDIS_REST_URL production`
+2. `vercel env add UPSTASH_REDIS_REST_TOKEN production`
+3. `vercel --prod -y` redeploy
+
+設完後 multi-instance rate limit 才會正確共享計數。
+
+### Repository final state
+
+- Branch `main`: 15 commits ahead of original baseline `acfd188`
+- All R2 commits pushed to origin
+- Working tree clean
