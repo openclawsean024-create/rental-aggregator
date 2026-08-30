@@ -1,7 +1,7 @@
-# Build Report — rental-aggregator M1 Hardening round
+# Build Report — rental-aggregator M1 Hardening round + M3.5 R2 upgrade
 
-> 期間：2026-08-29
-> Branch：`main`（7 commits ahead of origin/main，皆未 push）
+> 期間：2026-08-29（M1 Hardening）→ 2026-08-30（M3.5 Rate limit hardening）
+> Branch：`main`（13 commits ahead of origin/main，皆未 push）
 > Goal：把 M1 黑名單 MVP 從「能跑」推進到「production-ready」（見 [PLAN.md](./PLAN.md)）
 
 ## 本 round commits（依時序，從 `git log acfd188..HEAD` 撈）
@@ -41,6 +41,34 @@
    - verify log: `rpb-security-verify.log`
    - 改了 3 檔（+537/-1）：`vercel.json`（+18/-1）、`SECURITY_FINDINGS.md`（new, 216）、`rpb-security-verify.log`（new, 304）
 
+---
+
+### M3.5 Rate limit hardening（R2 upgrade，2026-08-30，commits `9ea4901` + `7705758`）
+
+> 從 M3 in-memory 升級為 Upstash Redis 共享狀態，解決 PLAN.md R2 known limitation。
+> M3 backend commit `23e7683` 的 rate-limit.ts 被 `9ea4901` 取代。
+
+8. `9ea4901` — `rpb(backend): R2 M1 — rate-limit Upstash Redis + in-memory fallback`
+   - owner: backend｜scope: rate-limit primary path upgrade
+   - verify log: `rpb-r2-backend-verify.log`
+   - 改了 5 檔（+450/-30）：`src/lib/rate-limit.ts`（重寫 236 行）、`src/app/api/blacklist/route.ts`（+1 line `await`）、`.env.example`（+7 lines UPSTASH_* placeholder）、`package.json` + `package-lock.json`（+2 deps: `@upstash/redis` 1.38.3 + `@upstash/ratelimit` 2.0.8）
+
+9. `7705758` — `rpb(qa): R2 M2 — mock-based rate-limit tests (14 refactored + 4 new Redis cases)`
+   - owner: qa｜scope: rate-limit test mock refactor + new Redis case coverage
+   - verify log: `rpb-r2-qa-verify.log`
+   - 改了 1 檔（+357 lines net）：`src/lib/rate-limit.test.ts`（既有 14 tests 改 mock-based `@upstash/redis` + `@upstash/ratelimit`，新增 4 case：Redis happy / over limit / down fallback / init failure）
+
+**M3.5 總計**：2 commits、6 files changed（重寫 1 + 修改 4 + package-lock 1）、coverage 97.4% statements（`rate-limit.ts` 100%），**111 tests passing**（M3 baseline 107 + 4 新 Redis case）
+
+### M3.5 Rate limit hardening 重點摘要
+
+- **R2 status**: ✅ FIXED
+- **Scope**: `src/lib/rate-limit.ts` 升級為 async + `@upstash/ratelimit` slidingWindow(5, "60 s") + in-memory Map fallback
+- **新 deps**（兩者合計 14.1KB gzipped，符合 M3 zero heavyweight dep 約束）：`@upstash/redis` 1.38.3（2.4KB gzipped）+ `@upstash/ratelimit` 2.0.8（11.7KB gzipped）
+- **Files**: `src/lib/rate-limit.ts`（重寫 236 行）、`src/app/api/blacklist/route.ts`（+1 line `await`）、`.env.example`（+7 lines）、`src/lib/rate-limit.test.ts`（357 行 mock-based）、`package.json` + `package-lock.json`
+- **API 不變**：`checkRateLimit(ip, limit, windowMs)` 維持同 signature（async；caller 已 `await`）
+- **Follow-up**: user Phase 0（Upstash Redis 帳號 + `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` env vars 設到 Vercel）→ production deploy + M4 deploy verify 跑 4 個 curl 測試
+
 **本 round 總計**：7 commits、17 files changed（新增 8 files + 修改 9 files）、LOC 估算約 +2,418 / -35（純從 `git log --stat` 加總，扣除 PLAN.md 變更）。
 
 ## Verify logs（本 round 全部 exit 0）
@@ -51,7 +79,10 @@
 | `rpb-qa-verify.log` | qa | M2 typecheck + 87/87 tests + build |
 | `rpb-backend-verify.log` | backend | M3 backend typecheck + 107/107 tests + build + coverage 97.16% |
 | `rpb-security-verify.log` | security | M3 security typecheck + 107/107 tests + build + npm audit + secrets scan + TODO scan |
-| `rpb-docs-verify.log` | docs（本 round） | typecheck + 107/107 tests + build + README bash block lint + README size check + Markdown internal link check |
+| `rpb-r2-backend-verify.log` | backend（R2 M1） | R2 typecheck + 107/107 tests + build + coverage 97.4% + no real Upstash call |
+| `rpb-r2-qa-verify.log` | qa（R2 M2） | R2 mock-based rate-limit tests + 4 new Redis case + 111 tests passing |
+| `rpb-docs-verify.log` | docs（M1 Hardening） | typecheck + 107/107 tests + build + README bash block lint + README size check + Markdown internal link check |
+| `rpb-r2-docs-verify.log` | docs（R2 / 本 round） | typecheck + 111/111 tests + build + README bash block lint + size check（≤ 1.5×）+ Markdown link check + secrets scan |
 
 ## 主要變更摘要
 
@@ -78,7 +109,7 @@
 
 ## Follow-up（不在本 round）
 
-- [PLAN.md R2](./PLAN.md)：rate limit production 升級 Upstash Redis（多實例共享狀態）
+- ~~[PLAN.md R2](./PLAN.md)：rate limit production 升級 Upstash Redis（多實例共享狀態）~~ ✅ **M3.5 已修（commit `9ea4901` + `7705758`）**，僅剩 user Phase 0（設 env vars）+ production deploy verify
 - `TopDistricts.test.tsx` 的 `act()` wrap + `localhost:3000` ECONNREFUSED 警告（M1 baseline 既有，frontend round 修）
 - `npm audit fix --force` 升級 devDependencies（需先跑回歸 + peer deps 驗證）
 - CI 加 `npm audit --omit=dev --audit-level=high` 步驟
@@ -88,13 +119,17 @@
 ## 驗收 checklist
 
 - [x] `npm run typecheck` → exit 0
-- [x] `npm test` → 107/107 passed
+- [x] `npm test` → **111/111 passed**（M3.5 後；M1 Hardening 結束時 107/107）
 - [x] `npm run build` → exit 0
+- [x] `npm run test:coverage` → 97.4% statements（M1 Hardening 結束時 97.16%；M3.5 後微升）
 - [x] `git grep -E "TODO|FIXME|HACK"` → 0 hits（排除 PLAN.md / SECURITY_FINDINGS.md 自提及）
 - [x] `git grep -E "(sk-|AKIA|ghp_)[A-Za-z0-9]{16,}"` → 0 hits（排除 PLAN.md / package-lock.json 假陽性）
+- [x] `git grep -E "UPSTASH_REDIS_(REST_URL|REST_TOKEN)=.{20,}"` → 0 hits（無 leak 真實值）
 - [x] `SECURITY_FINDINGS.md` 無 critical
 - [x] 所有 `rpb-*-verify.log` 存在
-- [x] README / STATUS / SOP 同步
+- [x] README / STATUS / SECURITY_FINDINGS / BUILD_REPORT / PLAN.md 同步
+- [x] PLAN.md Risk Register R2 = ✅ FIXED in M3.5
+- [x] SECURITY_FINDINGS.md R2 = ✅ FIXED in M3.5
 - [x] 沒 push
 
 ## 本 round owner

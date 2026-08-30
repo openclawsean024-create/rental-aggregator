@@ -125,6 +125,21 @@ M3 hardening round 加了下列 production 強化（細節見 [`SECURITY_FINDING
 - **evidenceUrls scheme allowlist** — `PostSchema.evidenceUrls` 升級為 `.url().refine(/^https?:\/\//i)`，拒絕 `javascript:` / `data:` / `file:` / `ftp:`（commit `23e7683`）
 - **OWASP 掃描** — 0 critical、1 high（XSS，已修）、2 medium（皆已修）、1 known limitation。`npm audit --omit=dev` 0 vulnerabilities
 
+### M3.5 Rate limit hardening（commit `9ea4901` + `7705758`）
+
+M3 的 in-memory rate limit 在 Vercel serverless 多實例下不精確（見 `SECURITY_FINDINGS.md` R2）。
+M3.5 升級為 **Upstash Redis 共享狀態**：
+
+- **Primary path**：Upstash Redis HTTP REST（`@upstash/ratelimit` `slidingWindow(5, "60 s")`）
+- **In-instance fast path**：`ephemeralCache: Map()` — 同 instance 內每秒打多次不重複打 Redis
+- **Graceful fallback**：Redis 不可達時（env 未設 / init throw / runtime throw）→ `console.warn` + in-memory Map fallback（不 throw 給 caller，破壞既有功能）
+- **API 不變**：`checkRateLimit(ip, limit, windowMs)` 維持同樣 signature（改 async，caller 已 `await`）
+- **Setup**：在 https://console.upstash.com/ 建立 Redis database → 設 `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` 到 Vercel project env（`.env.example` 已有 placeholder）
+- **Free tier**：10K commands/day 足夠這個 case（5 req/min × 60 × 24 = 7200/day 單 IP worst case）
+- **Coverage**：`rate-limit.ts` 100% statements，4 個新 mock-based test case（Redis happy / over limit / down fallback / init failure）
+
+未動：API contract（caller 已 `await`）、既有 107 tests 全綠。
+
 ## 測試
 
 M3 baseline（`rpb-backend-verify.log`）：

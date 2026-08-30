@@ -2,6 +2,7 @@
 
 > 2026-08-08 (Hermes Agent 接手)
 > 2026-08-29 (M1 Hardening round — M1+M2+M3, 7 commits ahead of origin/main)
+> 2026-08-30 (M3.5 Rate limit hardening — R2 upgrade, 13 commits ahead of origin/main)
 
 ## M1 黑名單 MVP ✅ 完成 + Production Verified（2026-08-08）
 
@@ -100,6 +101,22 @@ https://rental-aggregator-three.vercel.app
 - **PLAN.md R2 — Rate limit in-memory 多實例不精確** — `src/lib/rate-limit.ts` 每個 serverless instance 各自計數；cold start 後 Map 會被清空。Production 升級路：Upstash Redis / Vercel KV / Cloudflare edge token bucket。M3 scope 不涵蓋升級（見 `SECURITY_FINDINGS.md` KNOWN LIMITATION 區塊 + `rpb-backend-verify.log`）。
 - **`TopDistricts.test.tsx` 的 `act()` wrap 警告 + `localhost:3000` ECONNREFUSED 訊息** — M1 baseline 既有（測試 mock 缺漏時 fallback 打 real fetch）；非 M2/M3 round 引入。Frontend round 再處理（要嘛補 mock、要嘛 wrap act()）。
 - **`npm audit` 含 devDependencies** 12 個 moderate+ 漏洞（happy-dom critical / postcss high 等），皆不進 production bundle，升級涉及 React 19 / Next 16 peer deps 風險，**留獨立 round 評估**（`SECURITY_FINDINGS.md` npm audit 段落）。
+
+---
+
+## M3.5 Rate limit hardening（R2 upgrade，2026-08-30）
+
+> 從 M3 in-memory 升級為 Upstash Redis 共享狀態，解決 PLAN.md R2 known limitation。
+
+- **R2 status**: ✅ FIXED
+- **Commits**: `9ea4901`（rpb(backend)）+ `7705758`（rpb(qa)）
+- **改動範圍**: `src/lib/rate-limit.ts` async refactor（236 行重寫）+ `@upstash/redis` 1.38.3 + `@upstash/ratelimit` 2.0.8 + mock-based tests（14 既有改寫 + 4 新 Redis case）
+- **Coverage**: 97.4% statements（`rate-limit.ts` 100%），**111 tests passing**（M3 baseline 107 + 4 新 Redis case）
+- **API 不變**：`checkRateLimit(ip, limit, windowMs)` 維持同 signature（async；`route.ts` 已 `await`）
+- **Follow-up 待 user 完成（Phase 0）**: Upstash Redis 帳號 + database → 設 `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` 到 Vercel project env
+- **Graceful fallback 保證**: user Phase 0 未完成時 deploy 也不會壞 — Redis env 沒設就自動走 in-memory（跟 M3 行為一樣）
+- **Files changed**: `src/lib/rate-limit.ts`（重寫）, `src/app/api/blacklist/route.ts`（+1 line `await`）, `.env.example`（+7 lines）, `src/lib/rate-limit.test.ts`（357 行 mock-based）, `package.json` + `package-lock.json`（+2 deps）
+- **詳細**: 見 `SECURITY_FINDINGS.md` R2 段落（已改為 ✅ FIXED in M3.5）+ `BUILD_REPORT.md` M3.5 round 區塊
 
 ## 下一階段：M2 屋況清單 + 租約產生器
 

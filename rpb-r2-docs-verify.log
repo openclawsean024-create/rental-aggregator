@@ -1,0 +1,116 @@
+=== R2 docs round verify log ===
+Date: 2026-08-30T00:01:50Z
+Branch: main @ 7705758
+Ahead of origin/main: 3 commits
+
+=== 1. File size check (5 .md files) ===
+    7523 README.md
+    8198 STATUS.md
+   15791 SECURITY_FINDINGS.md
+    9125 BUILD_REPORT.md
+   29808 PLAN.md
+   70445 total
+
+README size cap: 6275 * 1.5 = 9412.5 bytes
+README actual:     7523 bytes
+
+=== 2. bash code block lint (README) ===
+README bash lint exit=0
+
+=== 3. Secrets scan ===
+Pattern: (sk-|AKIA|ghp_)[A-Za-z0-9]{16,}
+(no hits)
+SECRETS_EXIT=0
+
+Pattern: UPSTASH_REDIS_(REST_URL|REST_TOKEN)=.{20,}
+rpb-r2-backend-verify.log:573:  UPSTASH_REDIS_REST_URL=https://fake.upstash.io
+UPSTASH_EXIT=0
+
+=== 4. TODO/FIXME/HACK scan ===
+BUILD_REPORT.md:81:| `rpb-security-verify.log` | security | M3 security typecheck + 107/107 tests + build + npm audit + secrets scan + TODO scan |
+BUILD_REPORT.md:125:- [x] `git grep -E "TODO|FIXME|HACK"` → 0 hits（排除 PLAN.md / SECURITY_FINDINGS.md 自提及）
+PLAN.md:139:| TODO/FIXME/HACK scan | ✅ 0 new debt（rpb-docs-verify.log 自指不算） |
+PLAN.md:151:| 5 | Code quality bar | ✅ 無 TODO/FIXME/HACK / 無 console.log（除 test invariant）/ 無未使用 import / 無 raw exception 吞噬 |
+PLAN.md:256:  - `git grep -E "TODO|FIXME|HACK"` 沒有新增（M2/M3 不該留）
+PLAN.md:324:- [ ] `git grep -E "TODO|FIXME|HACK"` 沒有新增
+PLAN.md:503:- [ ] `git grep -E "TODO|FIXME|HACK"` 0
+SECURITY_FINDINGS.md:114:- **TODO/FIXME/HACK 殘留**：`git grep -E "TODO|FIXME|HACK"` 在排除 PLAN.md 自提及後**無新增**（M2/M3 不留技術債）
+rpb-docs-verify.log:120:7. git grep — TODO/FIXME/HACK residual
+rpb-docs-verify.log:123:  git grep -nE "TODO|FIXME|HACK" -- \
+rpb-docs-verify.log:131:TODO_EXIT=0
+rpb-docs-verify.log:132:✅ PASS — 0 new debt (docs round 不留 TODO/FIXME/HACK)
+rpb-docs-verify.log:155:  TODO scan         : PASS (0 new debt)
+rpb-security-verify.log:228:7. git grep — TODO/FIXME/HACK residual
+rpb-security-verify.log:230:Pattern: (TODO|FIXME|HACK)
+rpb-security-verify.log:239:TODO_EXIT=0
+rpb-security-verify.log:289:  TODO scan        : PASS (0 new debt)
+TODO_EXIT=0
+(all matches are self-references in PLAN.md / SECURITY_FINDINGS.md / BUILD_REPORT.md / verify logs)
+
+=== 5. Internal markdown link check ===
+OK: PLAN.md (   29808 bytes)
+OK: BUILD_REPORT.md (    9125 bytes)
+OK: PRD/SPEC.md (   30484 bytes)
+OK: SECURITY_FINDINGS.md (   15791 bytes)
+
+=== 6. npm run typecheck ===
+
+> rental-aggregator@0.1.0 typecheck
+> tsc --noEmit
+
+typecheck EXIT=0
+
+=== 7. npm test ===
+ ✓ src/components/TopDistricts.test.tsx (3 tests) 98ms
+ ✓ src/components/BlacklistSearch.test.tsx (4 tests) 50ms
+
+ Test Files  8 passed (8)
+      Tests  111 passed (111)
+   Start at  08:01:51
+   Duration  814ms (transform 359ms, setup 551ms, collect 763ms, tests 311ms, environment 1.59s, prepare 466ms)
+
+test EXIT=0
+
+=== 8. npm run build ===
+✓ Generating static pages using 7 workers (3/3) in 196ms
+  Finalizing page optimization ...
+  Collecting build traces ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /api/blacklist
+├ ƒ /api/blacklist/stats
+└ ƒ /api/health
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+build EXIT=0
+
+=== 9. npm run test:coverage ===
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+Statements   : 97.4% ( 1730/1776 )
+Branches     : 93.22% ( 358/384 )
+Functions    : 93.1% ( 27/29 )
+Lines        : 97.4% ( 1730/1776 )
+
+=== 10. status check (working tree clean before commit) ===
+ M BUILD_REPORT.md
+ M PLAN.md
+ M README.md
+ M SECURITY_FINDINGS.md
+ M STATUS.md
+?? rpb-r2-docs-verify.log
+
+=== Summary ===
+- typecheck: PASS (exit 0)
+- test: 111/111 passing (M3.5 baseline; +4 Redis cases over M3)
+- build: PASS (exit 0)
+- coverage: 97.4% statements / 93.22% branches (rate-limit.ts 100%)
+- bash lint: PASS
+- secrets scan: PASS (no committed Upstash tokens)
+- internal links: PASS (PLAN/BUILD_REPORT/SPEC/SECURITY_FINDINGS all exist)
+- README size: 7523 < 9413 cap (1.20x of original 6275)
+- R2 status across files: ✅ FIXED in M3.5

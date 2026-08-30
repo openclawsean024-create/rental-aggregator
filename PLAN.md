@@ -299,7 +299,7 @@ M2 (tests) ────────────────┐  │
 | ID | Risk | Mitigation |
 |---|---|---|
 | R1 | vitest 預設排除 `src/app/api/**/route.ts`（API 整合測試） | M2 新增 route test 時順手調整 vitest.config.ts 加 `route.test.ts` 到 include，coverage 不要把 route 算進去（維持既有排除） |
-| R2 | in-memory rate limit 在 Vercel serverless 多實例下會失效 | 加註解說明 production 多實例需換 Upstash Redis；M3 scope 不涵蓋此升級 |
+| R2 | in-memory rate limit 在 Vercel serverless 多實例下會失效 | ✅ FIXED in M3.5（commit `9ea4901` + `7705758`）— 升級 Upstash Redis + in-memory fallback |
 | R3 | `evidenceUrls` 從 `.url()` 改成 `.refine` 可能 reject 既有合法 https URL | 測試要涵蓋合法 https 仍 200，非法 scheme 才 400 |
 | R4 | CSP header 太嚴會破壞 Next.js inline style | 啟動時用 `Content-Security-Policy-Report-Only` 觀察一段時間，再轉正式（M3 不啟用 report-only，僅加嚴格但可運行的版本） |
 | R5 | Sync-3way 自動 commit 衝突 orchestrator 的 PLAN.md | PLAN.md 放在 clone 根目錄，跟 SOP 的 commit pattern 一致；如有衝突 docs round 重排 |

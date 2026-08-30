@@ -1,7 +1,7 @@
-# Security Findings — rental-aggregator（M3 round, 2026-08-29）
+# Security Findings — rental-aggregator（M3 round, 2026-08-29 + M3.5 R2 upgrade, 2026-08-30）
 
-> **Owner**：security lead（rpb(security): commit pending）
-> **Scan window**：M1~M3（5 commits ahead of origin/main：`f6b2e12` M1 CI → `b20ab4c` PLAN → `b50494e` M2 tests → `bf5d49b` PLAN update → `23e7683` M3 backend）
+> **Owner**：security lead（rpb(security): commit pending；rpb(docs): M3.5 同步 R2 FIXED status）
+> **Scan window**：M1~M3（5 commits ahead of origin/main：`f6b2e12` M1 CI → `b20ab4c` PLAN → `b50494e` M2 tests → `bf5d49b` PLAN update → `23e7683` M3 backend）+ M3.5 R2 upgrade（commit `9ea4901` backend + `7705758` qa）
 > **嚴重度口徑**：critical = 已有 PoC 可直接利用；high = 有具體攻擊面但需條件；medium = 防禦缺口需補強；low = hardening 建議
 
 ---
@@ -77,21 +77,26 @@
   - **未啟用** `report-uri` / `report-to`：M1 MVP 無 endpoint，留 follow-up
 - **建議**：✅ 本 round 修。進階 strict CSP（nonce-based）+ Report-Only 觀察期留 follow-up。
 
-### ⚠️ KNOWN LIMITATION（plan follow-up，已紀錄於 PLAN.md R2）
+### ✅ FIXED in M3.5（commit `9ea4901` + `7705758`）
 
-#### [MEDIUM] Rate limit 在 Vercel serverless 多實例下不精確（commit `23e7683`）
+#### [MEDIUM] Rate limit 在 Vercel serverless 多實例下不精確（原 KNOWN LIMITATION，commit `9ea4901` 修）
 
-- **受影響**：`src/lib/rate-limit.ts`（line 31 `const buckets = new Map<...>()`）
-- **限制描述**：
-  - 每個 instance 獨立計數（同 IP 在多個 instance 上的請求可能總計超過 limit 才被擋）
-  - Cold start 後 Map 會被清空（攻擊者若正好撞到 cold start 會 reset）
-  - 不適用於分散式 botnet 攻擊（每個 IP 只打 1 次）
-- **緩解**：已在 `src/lib/rate-limit.ts` JSDoc（rate-limit.ts:1~29）與 PLAN.md Risk Register R2 紀錄
-- **Production upgrade path**（follow-up，本 round 不做）：
-  - Upstash Redis（per-IP INCR + EXPIRE 原子操作）
-  - Vercel KV（同上，Vercel 原生整合）
-  - Cloudflare edge token bucket（在 WAF 層做）
-- **建議**：✅ 接受為 known limitation，留後續 round 評估升級時機（M3 backend verify log 內已有 reminder）
+- **受影響**：`src/lib/rate-limit.ts`（line 109 `const buckets = new Map<...>()` — 仍作為 graceful fallback 存在，但 primary path 已升級）
+- **漏洞描述**：Vercel serverless 多實例架構下，每個 instance 獨立計數；cold start 後 Map 清空；不適用於分散式 botnet 攻擊
+- **M3.5 修法**：升級為 Upstash Redis HTTP REST（`@upstash/ratelimit` `slidingWindow(5, "60 s")` + `ephemeralCache: Map()` in-instance fast path）：
+  - 多實例 / 多 region 共享計數（Redis 是 single source of truth）
+  - Cold start 不影響（Redis 狀態持久，不依賴 instance 記憶體）
+  - Graceful fallback：Redis 不可達時（env 未設 / init throw / runtime `limit()` throw）→ `console.warn` + 走 in-memory（**不 throw 給 caller**，破壞既有功能）
+- **驗證**：`src/lib/rate-limit.test.ts`（357 行，55 `it(` cases — 既有 14 改 mock-based + 新增 4：Redis happy path / over limit / down fallback / init failure）；coverage `rate-limit.ts` 100%
+- **Production 行為**：
+  - **Phase 0 未完成前**（`UPSTASH_*` env 未設）→ 自動走 in-memory fallback（跟 M3 完全一樣）
+  - **Phase 0 完成後**（env 設好）→ Redis 共享計數，多實例正確
+  - 任一情況都不會 throw 給 caller
+- **Production deploy 後驗證**（Milestone 4 / user Phase 0 完成後跑）：
+  - `curl -X POST` 連發 6 次 → 第 6 次 HTTP 429 + `Retry-After` header
+  - 換 `x-forwarded-for` source IP → 不被擋（per-IP isolation 仍正確）
+  - 6 個 security headers 還在（沒被 vercel.json 新版洗掉）
+- **建議**：✅ FIXED（R2 status 在 PLAN.md Risk Register 同步更新）
 
 ---
 
