@@ -182,3 +182,5 @@ npx vercel deploy --prod --yes --token $VERCEL_TOKEN
 - **資訊密度** — 首屏 hero 搜尋列 + 熱門風險區 TOP 5 + 最近 7 天新增
 - **信任感** — 每頁 footer 都有免責聲明 + 律師顧問 placeholder
 - **可及性** — WCAG AA color contrast
+
+<!-- Last validated: 2026-09-06 by OpenClaw Overnight Dev -->
