@@ -5,55 +5,104 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
-# 最小權限：只讀 contents，避免 workflow 有多餘能力。
-# 不需要寫 token / 不需要 deploy，因此不給 id-token / packages。
+# 4-job 部署契約（fleet template）：
+#   lint  →  test  →  build  →  deploy (Vercel, only on push to main)
+# Pages 與 Vercel 二擇一，rental-aggregator 採 Vercel（Next.js 16 + vercel.json）
 permissions:
   contents: read
+  pages: write
+  id-token: write
 
 # 取消舊 in-flight run，避免同一 PR 多筆 push 浪費 runner。
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-jobs:
-  verify:
-    name: Lint / Typecheck / Test / Build
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      # CI 不需要真的 DB connection：build-time 只需 prisma generate（讀 schema），
-      # runtime DB 連線留給 Vercel deploy 階段處理。設 placeholder 避免 Prisma client
-      # 初始化時抱怨缺少 DATABASE_URL。
-      DATABASE_URL: "postgresql://placeholder:placeholder@localhost:5432/placeholder?schema=public"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+env:
+  DEPLOY_TARGET: vercel
 
-      - name: Setup Node.js 22
-        uses: actions/setup-node@v4
+jobs:
+  lint:
+    name: Lint (ESLint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          # 用 lockfile 自動 cache npm 依賴，比自幹 cache 快。
+          node-version: '20'
           cache: 'npm'
           cache-dependency-path: package-lock.json
+      - run: npm ci --legacy-peer-deps || npm install
+      - run: npm run lint
+        continue-on-error: false
 
-      - name: Install dependencies
-        # --legacy-peer-deps 對齊 vercel.json installCommand（避免 React 19 / Next 16 peer 衝突）
-        run: npm ci --legacy-peer-deps
+  test:
+    name: Unit Tests (Vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      # CI 不需要真的 DB connection，build-time 只需 prisma generate
+      DATABASE_URL: "postgresql://placeholder:placeholder@localhost:5432/placeholder?schema=public"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+      - run: npm ci --legacy-peer-deps || npm install
+      - run: npm run db:generate
+      - run: npm test
 
-      - name: Generate Prisma Client
-        # 獨立 step 讓 prisma schema 錯誤在進入 webpack 之前就 fail-fast；
-        # npm run build 內已含 prisma generate，這裡只是提早暴露錯誤。
-        run: npm run db:generate
+  build:
+    name: Build (Next.js)
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: "postgresql://placeholder:placeholder@localhost:5432/placeholder?schema=public"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+      - run: npm ci --legacy-peer-deps || npm install
+      - run: npm run db:generate
+      - run: npm run typecheck
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: next-build-output
+          path: .next/
+          if-no-files-found: ignore
+          retention-days: 7
 
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Run unit tests (vitest)
-        run: npm test
-
-      - name: Build (Next.js webpack)
-        # 不加 --webpack 旗：package.json build script 已固定 `next build --webpack`
-        # （Turbopack 有 nft.json bug，見 STATUS.md §踩過的坑 #3）
-        run: npm run build
+  deploy:
+    name: Deploy to Vercel
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+      - run: npm ci --legacy-peer-deps || npm install
+      - run: npm run build
+      - name: Deploy to Vercel
+        if: env.DEPLOY_TARGET == 'vercel'
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: '--prod'
+          working-directory: ./

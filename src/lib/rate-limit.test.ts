@@ -55,7 +55,6 @@ import {
   _resetRateLimitForTests,
   DEFAULT_LIMIT,
   DEFAULT_WINDOW_MS,
-  isRedisConfigured,
 } from "./rate-limit";
 import { Ratelimit } from "@upstash/ratelimit";
 

@@ -22,10 +22,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import {
   searchApproved,
-  getStats,
   recordSubmission,
   isStaticMode,
-  type BlacklistItem,
 } from "@/data/blacklist-store";
 import { maskLandlordName } from "@/lib/mask";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";

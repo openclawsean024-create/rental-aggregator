@@ -80,7 +80,6 @@ describe("static blacklist store", () => {
     });
 
     it("limit 與 offset 正確運作", () => {
-      const all = getAllApproved();
       const limit = 30;
       const page1 = searchApproved({ limit, offset: 0 });
       const page2 = searchApproved({ limit, offset: limit });

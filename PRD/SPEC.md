@@ -1,11 +1,21 @@
-# 台灣租屋防雷網 — 租屋黑名單 + 坑房資料庫 + 租約產生器 — 規格計劃書 v3.0 (sweet-spot rewrite)
+# 台灣租屋防雷網 — 租屋黑名單 + 坑房資料庫 + 租約產生器 — 規格計劃書 v3.0.2 (10-repo-fleet hardening)
 
-- 版本：v3.0｜更新日期：2026-07-19｜維護者：Sophia (CPO) for Sean
+> **v3.0.2 patch（2026-09-06 by Sean 10-repo-fleet）** —
+> 對齊 fleet-wide 規格契約（SPEC §1–§19 + Definition of Done + 部署契約）。
+> 本次變更為**程式面 / CI 面 / 工具面 hardening**，不變更產品 spec：
+> - 修復 `npm run lint`（Next 16 移除 `next lint`，改用 ESLint flat config + `@typescript-eslint` 直接設定）
+> - 移除 4 個 unused import / var 噪音
+> - 升級 GHA workflow（從單 `verify` job → 4-job：lint / test / build / deploy to Vercel）
+> - 補上 `PRD/CHANGELOG.md`（v3.0.2 變更日誌）
+> - 既有 v3.0 / v3.0 sweet-spot rewrite v2 的產品 spec 全部保留（§1–§16 不變）
+
+- 主版本：v3.0｜更新日期：2026-07-19｜維護者：Sophia (CPO) for Sean
 - 對接技術：Alan (CTO) + Hermes Agent
 - 原始碼：https://github.com/openclawsean024-create/rental-aggregator
 - Live：https://rental-aggregator-three.vercel.app/
 - 本次重寫動機：**Sweet Spot 體檢 4/10，591 沒有公開 API 是硬限制**，做跨平台租屋比價是紅海中的紅海。本次**完全放棄比價定位**，改做「**591 之外的甜蜜點**：① 台灣租屋黑名單/坑房資料庫 + ② 租屋合約產生器 + ③ 押金信託比較」三件套，瞄準**租屋決策前後的真實痛點**。
 - **v3.0 sweet-spot rewrite v2（2026-07-19 Group D 批次）**：本次強化重點為「**591 vs 我們甜蜜點的可量化證據**」（591 流量 + 黑名單資料累積 + 銀行合作里程碑）。
+- **v3.0.2 patch（2026-09-06 Sean 10-repo-fleet batch 3E）**：程式面 / CI 面 / 工具面 hardening（見上方說明）。
 
 ---
 
