@@ -1,123 +1,74 @@
-# rental-aggregator 狀態
+# STATUS — 台灣租屋防雷網（暫定，rental-aggregator）
 
-> 2026-08-08 (Hermes Agent 接手)
-> 2026-08-29 (M1 Hardening round — M1+M2+M3, 7 commits ahead of origin/main)
-> 2026-08-30 (M3.5 Rate limit hardening — R2 upgrade, 13 commits ahead of origin/main)
+> 更新：2026-11-16｜本次為**文件重建（評估＋PRD v4.0＋M1 GOAL），尚未依新版開發任何程式**。
+> 基準 commit：`d2a579c`（`main`）。本機無 node，lint／typecheck／test／build 皆未在本機執行。
 
-## M1 黑名單 MVP ✅ 完成 + Production Verified（2026-08-08）
+## 1. 目前狀態
 
-### production 驗證結果（11/11 通過）
+| 項目 | 狀態 |
+|---|---|
+| 建議 | **暫緩**（獲利潛力低；需 Sean 決定方向），但正式站黑名單應立即下架 |
+| 完成度（依改版方向） | 15／100 |
+| 正式站 | `rental-aggregator-three.vercel.app`、`rental-aggregator-sean.vercel.app` 在線，static 模式，公開 804 筆程式生成的假黑名單 |
+| CI | 最近 7 次 push 全失敗（test job：`@rollup/rollup-linux-x64-gnu` 缺漏）；build、deploy 從未執行 |
+| 已實作頁面 | 只有首頁 `/`（黑名單搜尋＋熱門區）；`/submit` 不存在 |
+| 已實作 API | `GET/POST /api/blacklist`、`GET /api/blacklist/stats`、`GET /api/health` |
+| 測試 | 8 個測試檔，grep 計 111 個測試呼叫（未在本機執行） |
+| 爬蟲 | 無（主 repo 未爬 591／Dcard） |
 
-```
-https://rental-aggregator-sean.vercel.app
-https://rental-aggregator-three.vercel.app
+## 2. FR 對照（PRD v4.0 §6）
 
-✅ /api/health                      → HTTP 200, mode=static, 804 entries
-✅ GET /api/blacklist?q=王&district=大安  → HTTP 200, 290ms
-✅ GET /api/blacklist 第二次              → HTTP 200, 284ms (warm, < 500ms PRD §5.1)
-✅ GET /api/blacklist/stats          → HTTP 200, 287ms
-✅ POST /api/blacklist                 → HTTP 202, 293ms (status=pending, fake ID)
-✅ Response shape: mode=static, totalEntries present
-✅ totalEntries=804 ≥ 800（PRD §3.1 AC-01 預載 1,000 筆）
-✅ 查詢含去識別化王姓 + 大安區
-✅ stats TOP 5 含台北市
-✅ POST mask 正確（生○）+ status=pending
-✅ 首頁「找房前」+「免責聲明」都有
-```
+| FR | 名稱 | 優先 | 狀態 | 所在 |
+|---|---|---|---|---|
+| FR-001 | 下架黑名單 | P0 | 未實作 | rental-aggregator |
+| FR-002 | 屋況檢查清單範本 | P0 | 未實作（空資料表 `Inspection`） | rental-aggregator |
+| FR-003 | 入住／退租對照 | P0 | 未實作 | — |
+| FR-004 | 本機保存、匯出、列印 | P0 | 未實作 | — |
+| FR-005 | 租約草稿產生器 | P0 | 未實作（空資料表 `LeaseContract`） | rental-aggregator |
+| FR-006 | 租約規則檢查 | P0 | 未實作 | — |
+| FR-007 | 免責聲明 | P0 | 未實作（首頁有舊版免責文字） | — |
+| FR-008 | 品質閘門 | P0 | 部分（workflow 存在但 test 長期失敗） | rental-aggregator |
+| FR-009 | 押金與退租規則說明 | P1 | 未實作 | — |
+| FR-010 | 看房比較與收藏 | P1 | 部分（寫死資料） | rental-matcher |
+| FR-011 | 看房行程 | P2 | 部分（只能新增固定 mock） | rental-matcher |
+| FR-012 | 帳號與雲端保存 | P1 | 未實作 | — |
+| FR-013 | 照片上傳 | P1 | 未實作 | — |
+| FR-014 | PDF 產出 | P1 | 未實作 | — |
+| FR-015 | 付費解鎖 | P2 | 未實作 | — |
+| FR-016 | 押金信託資訊 | P2 | 未實作 | — |
+| FR-017 | 小房東版 | P2 | 未實作 | — |
+| FR-018 | 公開 API rate limit | P1 | 已實作（套在黑名單 POST） | rental-aggregator |
+| FR-019 | 黑名單雙方陳述／審核／付費查姓名 | — | 不做 | — |
 
-### 完成項目
+## 3. M1 進度（GOAL.md）
 
-- ✅ Next.js 16.3.0 + TS + Tailwind + Prisma 骨架
-- ✅ Prisma schema 對齊 PRD §4.3（User / BlacklistEntry / Inspection / LeaseContract）
-- ✅ Seed 1,000 筆程式生成（不爬 Dcard — 爬蟲法律風險）
-- ✅ GET /api/blacklist?q=&district= + 去識別化（王○明）
-- ✅ POST /api/blacklist → status=pending 進審核佇列
-- ✅ GET /api/blacklist/stats — TOP 5 風險區 + 7 天新增
-- ✅ 首頁 hero 搜尋 + Airbnb-style 安靜卡片 + 風險區 TOP 5 bar chart
-- ✅ 設計準則：slate/indigo + amber 警示 + red-700 嚴重 + Inter/Noto Sans TC
-- ✅ vitest 34/34 pass, coverage 95.09% / 92.47% / 83.33%
-- ✅ tsc --noEmit 0 error
-- ✅ next build 0 error
-- ✅ Vercel 部署成功（production SHA `2105024`）
-- ✅ alias rental-aggregator-sean.vercel.app + rental-aggregator-three.vercel.app
-- ✅ Notion page `3b6449ca-65d8-81c4-a5f2-f398433ad93e`
-- ✅ sync-3way 3-way 對齊
-
-### 設計決策：Static JSON Fallback
-
-**問題**：Vercel serverless filesystem 是 read-only，SQLite file 沒法寫。Sean 沒給 Supabase/Neon connection string 也沒授權 Vercel Postgres marketplace。
-
-**解法**（2026-08-08）：
-1. 把 1,000 筆 approved 資料 export 成 `src/data/blacklist.json`（248 KB）
-2. 寫 `src/data/blacklist-store.ts` 提供 `searchApproved()` / `getStats()` / `recordSubmission()` 函式
-3. Route Handler 根據 `isStaticMode()` 自動切換：
-   - `USE_BLACKLIST_STATIC=1` 或 `VERCEL=1 + 沒有真的 Postgres URL` → 走 static JSON
-   - `DATABASE_URL=file:...` → 走 Prisma + SQLite（dev mode）
-4. POST 在 static 模式：console 記錄 + 回 202 + fake pending ID + 訊息告知管理員
-
-**升級路（無需改 code）**：
-- Sean 提供 Postgres connection string → PATCH Vercel env
-- `isStaticMode()` 自動偵測到真的 URL → 切換回 Prisma 模式
-- 移除 `src/data/blacklist.json` 也不是必須，但會浪費 248 KB
-
-### 踩過的坑（記給以後參考）
-
-1. **Vercel x64 vs Mac ARM64 binary sha mismatch** → 移除 lockfile + vercel.json installCommand
-2. **Next 15.0.3 CVE 拒 deploy** → 升 16.3.0
-3. **Next 16 Turbopack nft.json 路徑錯** → build script 改 `next build --webpack`
-4. **`output: "standalone"` 部署失敗** → Vercel 預設用 Next.js 標準 serverless 部署，不需要 standalone
-5. **postinstall prisma generate 在 install 階段 fail** → 移除，靠 build script 第一行 prisma generate
-6. **Vercel CLI 印 `▲ Aliased` 但 alias 仍指舊 deployment** → 用 Vercel HTTP API 顯式 POST `/v2/deployments/{id}/aliases` 把 alias 指到新 deployment
-7. **isStaticMode() 看似沒 work** → 真正原因是 alias 沒更新，serverless function 仍跑舊 deployment；用 `/api/debug` 端點 trace 出來
-
----
-
-## M1 Hardening round（M2/M3）— 2026-08-29
-
-> 從「能跑」推進到「production-ready」。本輪 7 commits ahead of origin/main，皆未 push（goal constraint）。
-
-### 本輪做的事（依時序）
-
-| Commit | Owner | 內容 |
+| AC | 標題 | 狀態 |
 |---|---|---|
-| `f6b2e12` | devops | 新增 `.github/workflows/ci.yml`：Node 22、push/PR trigger、permissions: contents read、concurrency cancel-in-progress、order: `db:generate` → `typecheck` → `test` → `build`（10 分鐘 timeout） |
-| `b20ab4c` | orchestrator | PLAN.md with Resume Context（Goal Round 1）— 拆出 M1~M4 與 owner 對應 |
-| `b50494e` | qa | Milestone 2 — edge case 測試（87/87 passing）：`src/lib/mask.test.ts`（23 tests）+ `src/data/blacklist-store.test.ts`（27 tests）+ `src/app/api/blacklist/route.test.ts`（route 整合測試）+ `src/lib/mask-invariant.test.ts`（ADR-002 靜態守衛）|
-| `bf5d49b` | orchestrator | PLAN.md status update（M2 done, M3 backend in flight） |
-| `23e7683` | backend | M3 hardening — 新增 `src/lib/rate-limit.ts`（per-IP sliding window 5 req/min，100% coverage）+ POST handler 套 rate limit（429 + `Retry-After`）+ `evidenceUrls` scheme allowlist（`/^https?:\/\//i`）|
-| `6b575b2` | orchestrator | PLAN.md status update（M3 backend done, security in flight） |
-| `0ac551f` | security | M3 hardening — `vercel.json` 加 6 個 security headers（CSP / X-Frame-Options DENY / HSTS / Referrer-Policy / Permissions-Policy / X-Content-Type-Options）+ 產出 `SECURITY_FINDINGS.md`（0 critical / 1 HIGH / 2 MEDIUM / 1 KNOWN LIMITATION）|
+| AC-001 | 品質閘門真正擋得住失敗 | 未開始 |
+| AC-002 | 黑名單功能從程式下架 | 未開始 |
+| AC-003 | 屋況檢查清單（本機） | 未開始 |
+| AC-004 | 租約草稿產生器與規則提示 | 未開始 |
+| AC-005 | 不送出、不保存使用者資料到伺服器 | 未開始 |
+| AC-006 | 只用明顯假資料並顯示免責聲明 | 未開始 |
+| AC-007 | 文件與程式一致 | 未開始 |
 
-### Test 數 / Coverage 對比
+## 4. 已知風險
 
-| 指標 | M1 baseline (2026-08-08) | M3 結束 (2026-08-29) | 變化 |
-|---|---|---|---|
-| Test files | 4 | 8 | +4（mask-invariant / rate-limit / route / blacklist-store 擴充）|
-| Tests | 22 | 107 | +85（+386%）|
-| Coverage statements | 95.09% | 97.16% | +2.07pp |
+1. 正式站公開程式生成的假檢舉，且標示資料來源為「Dcard 公開黑特文章」：可能誤指真實房東，誹謗與個資風險。
+2. Prisma 模式下 `POST /api/blacklist` 以明文存第三人完整姓名，並以 `anon-<IP>` 當使用者 ID 與 email；static 模式把整筆檢舉內容寫進伺服器 log。
+3. 候選 repo `rental-house-aggregator` 的 PRD 規劃爬 591／樂屋網並自動刊登，不得併入。591 服務條款內容待確認。
+4. README、SOP 與程式多處不一致（PRD §13，共 14 項）。
 
-### Known Limitations（本輪驗出，留後續 round）
+## 5. 待決事項（Sean）
 
-- **PLAN.md R2 — Rate limit in-memory 多實例不精確** — `src/lib/rate-limit.ts` 每個 serverless instance 各自計數；cold start 後 Map 會被清空。Production 升級路：Upstash Redis / Vercel KV / Cloudflare edge token bucket。M3 scope 不涵蓋升級（見 `SECURITY_FINDINGS.md` KNOWN LIMITATION 區塊 + `rpb-backend-verify.log`）。
-- **`TopDistricts.test.tsx` 的 `act()` wrap 警告 + `localhost:3000` ECONNREFUSED 訊息** — M1 baseline 既有（測試 mock 缺漏時 fallback 打 real fetch）；非 M2/M3 round 引入。Frontend round 再處理（要嘛補 mock、要嘛 wrap act()）。
-- **`npm audit` 含 devDependencies** 12 個 moderate+ 漏洞（happy-dom critical / postcss high 等），皆不進 production bundle，升級涉及 React 19 / Next 16 peer deps 風險，**留獨立 round 評估**（`SECURITY_FINDINGS.md` npm audit 段落）。
+1. 是否立即下架正式站黑名單（建議：是）。
+2. 方向：(a) 本 repo 轉向本機工具；(b) 租約功能併入 `contract-reviewer`／`contract-tracker`；(c) 封存。
+3. 轉向後是否改產品名稱。
+4. `rental-matcher`、`home-finder`、`rental-house-aggregator` 是否封存。
+5. 是否委請律師覆核租約規則與免責文字。
+6. 是否清除舊版歷史檔（`BUILD_REPORT.md`、`PLAN.md`、`SECURITY_FINDINGS.md`、`rpb-*.log`、`dashboard.html`）。
 
----
+## 6. 本次變更
 
-## M3.5 Rate limit hardening（R2 upgrade，2026-08-30）
-
-> 從 M3 in-memory 升級為 Upstash Redis 共享狀態，解決 PLAN.md R2 known limitation。
-
-- **R2 status**: ✅ FIXED
-- **Commits**: `9ea4901`（rpb(backend)）+ `7705758`（rpb(qa)）
-- **改動範圍**: `src/lib/rate-limit.ts` async refactor（236 行重寫）+ `@upstash/redis` 1.38.3 + `@upstash/ratelimit` 2.0.8 + mock-based tests（14 既有改寫 + 4 新 Redis case）
-- **Coverage**: 97.4% statements（`rate-limit.ts` 100%），**111 tests passing**（M3 baseline 107 + 4 新 Redis case）
-- **API 不變**：`checkRateLimit(ip, limit, windowMs)` 維持同 signature（async；`route.ts` 已 `await`）
-- **Follow-up 待 user 完成（Phase 0）**: Upstash Redis 帳號 + database → 設 `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` 到 Vercel project env
-- **Graceful fallback 保證**: user Phase 0 未完成時 deploy 也不會壞 — Redis env 沒設就自動走 in-memory（跟 M3 行為一樣）
-- **Files changed**: `src/lib/rate-limit.ts`（重寫）, `src/app/api/blacklist/route.ts`（+1 line `await`）, `.env.example`（+7 lines）, `src/lib/rate-limit.test.ts`（357 行 mock-based）, `package.json` + `package-lock.json`（+2 deps）
-- **詳細**: 見 `SECURITY_FINDINGS.md` R2 段落（已改為 ✅ FIXED in M3.5）+ `BUILD_REPORT.md` M3.5 round 區塊
-
-## 下一階段：M2 屋況清單 + 租約產生器
-
-待 Sean 給 R2 bucket credentials（M2 拍照上傳才需要）後開工。
+- 改寫 `PRD/SPEC.md`（v4.0，含 §0 評估結論、合併清單、README 不符清單）、`GOAL.md`（新增）、`AGENTS.md`、`SOP.md`、`STATUS.md`。
+- 未修改任何程式碼、設定、測試；未修改 `PRD/CHANGELOG.md`。
